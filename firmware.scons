@@ -115,9 +115,18 @@ lib_targets = env.BuildModules(
 )
 
 # Configure firmware origin definitions
+# The origin becomes part of a C macro name (FW_ORIGIN_<origin>), so any
+# character that is not valid in an identifier -- e.g. the hyphen in
+# "Nikita-V8" -- must be replaced, or the compiler rejects the -D flag. The
+# displayed FIRMWARE_ORIGIN string (device_info, version.inc.h) keeps its
+# original spelling; only the macro-name form is sanitized.
+import re as _re
+_origin_macro = "FW_ORIGIN_" + _re.sub(
+    r"[^0-9A-Za-z_]", "_", env.subst("${FIRMWARE_ORIGIN}")
+)
 env.Append(
     CPPDEFINES=[
-        env.subst("FW_ORIGIN_${FIRMWARE_ORIGIN}"),
+        _origin_macro,
     ]
 )
 

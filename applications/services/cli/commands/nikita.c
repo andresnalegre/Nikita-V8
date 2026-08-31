@@ -102,7 +102,7 @@ static size_t nikita_memory_walk(
     Stream* stream = file_stream_alloc(storage);
     size_t index = 0;
 
-    if(file_stream_open(stream, NIKITA_MEMORY_FILE, FSAR_READ, FSOM_OPEN_EXISTING)) {
+    if(file_stream_open(stream, NIKITA_MEMORY_FILE, FSAM_READ, FSOM_OPEN_EXISTING)) {
         FuriString* line = furi_string_alloc();
         while(stream_read_line(stream, line)) {
             furi_string_trim(line);
@@ -164,7 +164,7 @@ static void nikita_memory_add(Storage* storage, FuriString* args) {
     }
 
     Stream* stream = file_stream_alloc(storage);
-    if(file_stream_open(stream, NIKITA_MEMORY_FILE, FSAR_WRITE, FSOM_OPEN_APPEND)) {
+    if(file_stream_open(stream, NIKITA_MEMORY_FILE, FSAM_WRITE, FSOM_OPEN_APPEND)) {
         stream_write_format(stream, "%s\n", furi_string_get_cstr(args));
         printf("Remembered.\r\n");
     } else {
@@ -191,7 +191,7 @@ static void nikita_memory_forget(Storage* storage, FuriString* args) {
     // take the whole memory with it.
     const char* temp_path = NIKITA_MEMORY_FILE ".tmp";
     Stream* out = file_stream_alloc(storage);
-    if(!file_stream_open(out, temp_path, FSAR_WRITE, FSOM_CREATE_ALWAYS)) {
+    if(!file_stream_open(out, temp_path, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
         printf("Cannot write to %s.\r\n", NIKITA_DIR);
         file_stream_close(out);
         stream_free(out);
