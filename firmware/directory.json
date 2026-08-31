@@ -4,7 +4,21 @@
       "id": "release",
       "title": "Release",
       "description": "Stable Nikita firmware. Recommended.",
-      "versions": []
+      "versions": [
+        {
+          "version": "nkt-001",
+          "changelog": "Nikita firmware nkt-001.",
+          "timestamp": 1788209444,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-001/flipper-z-f7-update-nkt-001.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "0b65add63ba69408399cf8cad8febfdbf12ead9be5a2ceae17c488030ddf80f5"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "release-candidate",
