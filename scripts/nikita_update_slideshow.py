@@ -29,44 +29,52 @@ OUT = os.environ.get("OUT", FRAMES)
 W, H = 128, 64
 BLACK, WHITE = (0, 0, 0), (255, 255, 255)
 
-font = ImageFont.load_default(size=10)
+def font(size):
+    return ImageFont.load_default(size=size)
+
+
+# The bubble on frame 1 is only 87px wide -- that is the Flipper's own layout,
+# and the dolphin sits immediately to its right -- so its text is set smaller to
+# fit, the way upstream's narrower face did.
+BODY, SMALL, TITLE = 10, 9, 12
 
 # Per frame: rectangles to blank, then text lines to draw at (x, y).
 # Rectangles are (x0, y0, x1, y1) inclusive.
 SCRIPT = [
     {   # "UNLEASHED / Firmware / Updated" -- dolphin and [next] kept
         "clear": [(56, 0, 127, 43)],
-        "text":  [((60, 2),  "NIKITA-V8", True),
-                  ((60, 15), "Firmware", False),
-                  ((60, 27), "Updated", False)],
+        "text":  [((60, 1),  "NIKITA-V8", TITLE),
+                  ((60, 16), "Firmware", BODY),
+                  ((60, 28), "Updated", BODY)],
     },
-    {   # the speech bubble -- dolphin and [next] kept
-        "clear": [(0, 6, 110, 50)],
-        "bubble": (1, 8, 108, 46),
-        "text":  [((5, 11), "Nikita software -", False),
-                  ((5, 23), "FREE & OpenSource", False),
-                  ((5, 35), "Beware of scammers", False)],
+    {   # The speech bubble. The dolphin's leftmost ink is column 90, so the
+        # bubble may use everything to its left -- a little taller than
+        # upstream's (rows 15-47) to keep the text at a legible size. At this
+        # width three lines only fit set smaller, and smaller than this turns
+        # to mud once the frame is reduced to 1-bit.
+        "clear": [(0, 10, 91, 54)],
+        "bubble": (1, 12, 89, 51),
+        "text":  [((4, 16), "Nikita is FREE", SMALL),
+                  ((4, 28), "& OpenSource", SMALL),
+                  ((4, 40), "Beware of scams", SMALL)],
     },
-    {   # Discord logo + upstream URL -- crab, shells and [next] kept
-        "clear": [(0, 0, 127, 44)],
-        "text":  [((14, 6),  "One agent, three", False),
-                  ((14, 19), "ways in: phone,", False),
-                  ((14, 30), "desktop and CLI", False)],
+    {   # Discord logo + upstream URL. The sea decoration resumes on row 43,
+        # so the cut stops at 42 and leaves the crab and shells whole.
+        "clear": [(0, 0, 127, 42)],
+        "text":  [((14, 6),  "One agent, three", BODY),
+                  ((14, 18), "ways in: phone,", BODY),
+                  ((14, 30), "desktop and CLI", BODY)],
     },
     {   # "github.com / DarkFlippers" -- cat art and [OK] kept
         "clear": [(36, 0, 127, 44)],
-        "text":  [((38, 8),  "github.com/", False),
-                  ((38, 22), "andresnalegre", False)],
+        "text":  [((38, 8),  "github.com/", BODY),
+                  ((38, 22), "andresnalegre", BODY)],
     },
 ]
 
 
-def draw_text(draw, xy, text, bold):
-    draw.text(xy, text, font=font, fill=BLACK)
-    if bold:
-        # The font has no bold face; one pixel of horizontal smear is what
-        # upstream's title weight looks like at this size.
-        draw.text((xy[0] + 1, xy[1]), text, font=font, fill=BLACK)
+def draw_text(draw, xy, text, size):
+    draw.text(xy, text, font=font(size), fill=BLACK)
 
 
 def main():
@@ -83,15 +91,16 @@ def main():
             draw.rectangle([x0 + 1, y0 + 1, x1 + 1, y1 + 1], fill=BLACK)
             draw.rectangle([x0, y0, x1, y1], fill=WHITE, outline=BLACK)
 
-        for xy, text, bold in spec["text"]:
-            width = draw.textlength(text, font=font)
-            if xy[0] + width > W:
+        for xy, text, size in spec["text"]:
+            width = draw.textlength(text, font=font(size))
+            limit = spec["bubble"][2] - 1 if "bubble" in spec else W
+            if xy[0] + width > limit:
                 raise SystemExit(
                     f"frame {index}: {text!r} is {int(width)}px wide and starts "
-                    f"at x={xy[0]}, running {int(xy[0] + width - W)}px off the "
-                    "128px screen -- shorten it"
+                    f"at x={xy[0]}, running {int(xy[0] + width - limit)}px past "
+                    f"x={limit} -- shorten it or set a smaller size"
                 )
-            draw_text(draw, xy, text, bold)
+            draw_text(draw, xy, text, size)
 
         # The panel is 1-bit; keep the files that way so the packer sees what
         # the screen will.
