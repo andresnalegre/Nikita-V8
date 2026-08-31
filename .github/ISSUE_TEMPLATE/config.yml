@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Unleashed (upstream) Telegram
+    url: https://t.me/flipperzero_unofficial
+    about: For anything that is not specific to the Nikita fork
+  - name: Unleashed (upstream) Discord
+    url: https://discord.unleashedflip.com
+    about: For anything that is not specific to the Nikita fork
