@@ -69,6 +69,43 @@ The command is `CliCommandFlagParallelSafe`, so it answers while an app is open.
 (`"nikita"`) and the About screen all report this firmware as itself rather than
 as Unleashed.
 
+### Welcome screen
+
+The first-boot slideshow is Nikita's. The Flipper's dolphin is kept — the frames
+were drawn around it — and only what it says is Nikita's own. Regenerate it with
+`python3 scripts/nikita_slideshow.py` after editing the script in that file; it
+reads `assets/slideshow/first_start/.original/`, never its own output, so it is
+safe to run repeatedly.
+
+## Releases
+
+Both clients install this firmware from a feed the release workflow publishes.
+Push a tag:
+
+```bash
+git tag nkt-001 && git push origin nkt-001
+```
+
+| Tag | Channel |
+|---|---|
+| `nkt-001` | release |
+| `nkt-001-rc` | release-candidate |
+| `nkt-001-dev` | development |
+
+That builds `updater_package`, attaches `flipper-z-f7-update-nkt-001.tgz` to a
+GitHub release, then regenerates and commits
+[`firmware/directory.json`](/firmware/ReadMe.md) — the feed
+[nikita-qflipper](https://github.com/andresnalegre/nikita-qflipper) and
+[Nikita-iOS](https://github.com/andresnalegre/Nikita-iOS) read as their **main**
+update path. Official and the other community firmwares stay reachable in both
+apps under Import.
+
+The tag is also the version: it becomes `DIST_SUFFIX`, so `device_info` reports
+`firmware_version: nkt-001` and both apps place the build on a real channel. A
+local build reports `v8` instead and reads as *custom* in both, which is what it
+is — but it still reads as **Nikita**, because that comes from
+`firmware_origin_fork`, not from the version string.
+
 ## Install
 
 Same as upstream — [Installation Guide](/documentation/HowToInstall.md),

@@ -1,0 +1,22 @@
+{
+  "channels": [
+    {
+      "id": "release",
+      "title": "Release",
+      "description": "Stable Nikita firmware. Recommended.",
+      "versions": []
+    },
+    {
+      "id": "release-candidate",
+      "title": "Release Candidate",
+      "description": "Nikita firmware under test before it becomes a release.",
+      "versions": []
+    },
+    {
+      "id": "development",
+      "title": "Development",
+      "description": "Nikita firmware built from the tip. Expect bugs.",
+      "versions": []
+    }
+  ]
+}

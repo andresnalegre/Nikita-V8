@@ -5,8 +5,6 @@
   "keywords": [
     "nikita",
     "nikita firmware",
-    "unleashed",
-    "ul",
     "flipper nikita fw sdk",
     "flipper",
     "flipper zero",
@@ -16,7 +14,7 @@
   "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/andresnalegre/nikita-firmware.git",
+    "url": "git+https://github.com/andresnalegre/Nikita-V8.git",
     "directory": "applications/system/js_app/packages/fz-sdk"
   },
   "type": "module",

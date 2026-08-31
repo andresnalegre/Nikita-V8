@@ -1,0 +1,148 @@
+# Publish a Nikita firmware release, and update the feed the two clients read.
+#
+# Triggered by pushing a tag:
+#
+#     nkt-001        -> release channel
+#     nkt-001-rc     -> release-candidate channel
+#     nkt-001-dev    -> development channel
+#
+# The tag is the version. It reaches the device twice: DIST_SUFFIX names the
+# update bundle and becomes device_info's firmware_version, and
+# WORKFLOW_BRANCH_OR_TAG becomes firmware_branch. Both clients read the channel
+# off those, so a release lands on a real channel instead of "custom".
+#
+# Two things are published:
+#   1. A GitHub release carrying flipper-z-f7-update-<tag>.tgz.
+#   2. firmware/directory.json, committed back to the default branch. That file
+#      IS the update feed -- nikita-qflipper and Nikita-iOS fetch it from
+#      raw.githubusercontent.com. No update server to run.
+#
+# The commit back to the default branch is the reason this needs contents:write.
+
+name: Release
+
+on:
+  push:
+    tags: ["nkt-*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish (e.g. nkt-001)"
+        required: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false # never abandon a half-published release
+
+permissions:
+  contents: write # create the release, and commit the regenerated feed
+
+env:
+  FBT_NO_SYNC: 0
+  FORCE_NO_DIRTY: "yes"
+  FBT_GIT_SUBMODULE_SHALLOW: 1
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          TAG="${INPUT_TAG:-$REF_NAME}"
+          # The feed generator refuses anything else, but failing here costs a
+          # few seconds instead of a full firmware build.
+          if ! printf '%s' "$TAG" | grep -Eq '^nkt-[0-9]+(-rc|-dev)?$'; then
+            echo "::error::'$TAG' is not a Nikita release tag (nkt-<number>[-rc|-dev])"
+            exit 1
+          fi
+          case "$TAG" in
+            *-rc)  PRERELEASE=true ;;
+            *-dev) PRERELEASE=true ;;
+            *)     PRERELEASE=false ;;
+          esac
+          echo "tag=$TAG"               >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          submodules: recursive
+          clean: "true"
+          fetch-depth: 0 # the build reads the version from git
+
+      - name: Build firmware
+        shell: bash
+        env:
+          # Both of these end up in device_info, and both clients read them.
+          DIST_SUFFIX: ${{ steps.tag.outputs.tag }}
+          WORKFLOW_BRANCH_OR_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          find applications/main/clock_app/resources/apps/ -mindepth 1 -maxdepth 1 \
+            ! -name Scripts -exec rm -rf {} + || true
+          ./fbt COMPACT=1 DEBUG=0 FBT_NO_SYNC="${FBT_NO_SYNC}" updater_package
+
+      - name: Locate the update bundle
+        id: bundle
+        shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          TGZ="$(find dist -name "flipper-z-f7-update-*.tgz" -type f | head -1)"
+          if [ -z "$TGZ" ]; then
+            echo "::error::no f7 update bundle in dist/ -- the build produced nothing to publish"
+            find dist -type f | head -50
+            exit 1
+          fi
+          echo "Found $TGZ"
+          echo "tgz=$TGZ" >> "$GITHUB_OUTPUT"
+
+      - name: Create the GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Nikita ${{ steps.tag.outputs.tag }}
+          prerelease: ${{ steps.tag.outputs.prerelease }}
+          generate_release_notes: true
+          files: ${{ steps.bundle.outputs.tgz }}
+          fail_on_unmatched_files: true
+
+      # The feed must be written only after the release exists: it points at the
+      # release's download URL, and a feed naming a download that 404s is worse
+      # than a feed that does not name it yet.
+      - name: Update the client update feed
+        shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          TGZ: ${{ steps.bundle.outputs.tgz }}
+        run: |
+          git checkout "${{ github.event.repository.default_branch }}"
+          git pull --ff-only
+          python3 .github/scripts/update_directory.py \
+            --tag "$TAG" \
+            --tgz "$TGZ" \
+            --repo "${{ github.repository }}" \
+            --timestamp "$(git log -1 --format=%ct "$TAG")" \
+            --out firmware/directory.json
+
+      - name: Commit the feed
+        shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add firmware/directory.json
+          if git diff --cached --quiet; then
+            echo "Feed already describes $TAG -- nothing to commit."
+            exit 0
+          fi
+          git commit -m "firmware feed: $TAG"
+          git push origin HEAD:"${{ github.event.repository.default_branch }}"
