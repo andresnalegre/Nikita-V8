@@ -734,12 +734,16 @@ static LoaderMessageLoaderStatusResult loader_do_start_by_name(
             if(storage_file_exists(storage, name)) {
                 // Reading a .fap off the SD card takes seconds; internal apps above are instant
                 loader_do_show_loading(loader);
+                // API mismatches are loaded without asking. The prompt this
+                // replaces offered exactly one button -- "Continue" -- and the
+                // code below it retried with ignore_api_mismatch set the moment
+                // you pressed it, so the answer was never in doubt and the
+                // dialog only stood between the user and the app. It also
+                // stalled the Loader's RPC reply until somebody pressed a
+                // button on the device, which made every remote "open app" look
+                // like a timeout to qFlipper.
                 status =
-                    loader_start_external_app(loader, storage, name, args, error_message, false);
-                if(status.value == LoaderStatusErrorApiMismatch) {
-                    status = loader_start_external_app(
-                        loader, storage, name, args, error_message, true);
-                }
+                    loader_start_external_app(loader, storage, name, args, error_message, true);
                 loader_do_hide_loading(loader);
                 furi_record_close(RECORD_STORAGE);
                 break;
