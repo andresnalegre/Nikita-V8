@@ -26,11 +26,23 @@
 #define NIKITA_DIR         EXT_PATH("nikita")
 #define NIKITA_MEMORY_FILE NIKITA_DIR "/memory.txt"
 
+// The relay mailbox. A client on BLE (nikita-IOS) cannot reach the machine the
+// Flipper is plugged into -- Bluetooth carries no serial line and the phone
+// runs on no shell of its own. But it CAN write a file over RPC, and the
+// nikita-flipper-bridge on that machine CAN read one over USB. So a request
+// left here by the phone is picked up on the far side, run, and its answer left
+// back in the same folder for the phone to read. The firmware only has to own
+// the folder and hand out one request at a time; the two ends do the rest.
+#define NIKITA_BRIDGE_DIR NIKITA_DIR "/bridge"
+#define NIKITA_BRIDGE_REQ NIKITA_BRIDGE_DIR "/req"
+#define NIKITA_BRIDGE_RES NIKITA_BRIDGE_DIR "/res"
+
 // The folders the ecosystem expects to find on a Nikita device.
 static const char* const nikita_dirs[] = {
     NIKITA_DIR,
     NIKITA_DIR "/artifacts",
     NIKITA_DIR "/scripts",
+    NIKITA_BRIDGE_DIR,
 };
 
 // A remembered fact is one line. Keep both the line and the file bounded so a
@@ -46,7 +58,10 @@ static void nikita_print_usage(FuriString* args) {
            "  nikita memory               list remembered facts\r\n"
            "  nikita memory add <text>    remember one fact\r\n"
            "  nikita memory forget <n>    drop fact number <n>\r\n"
-           "  nikita memory clear         drop all of them\r\n");
+           "  nikita memory clear         drop all of them\r\n"
+           "  nikita bridge status        show the relay mailbox\r\n"
+           "  nikita bridge poll          print a pending request and consume it\r\n"
+           "  nikita bridge clear         empty the mailbox\r\n");
 }
 
 static bool nikita_ensure_dirs(Storage* storage) {
@@ -220,6 +235,71 @@ static void nikita_memory_clear(Storage* storage) {
     }
 }
 
+// --- relay mailbox --------------------------------------------------------
+//
+// Deliberately dumb: the firmware never runs anything the request asks for. It
+// only holds the file and hands it over once. Whatever the request means is the
+// far side's problem, on the far side's machine, under whatever the user
+// allowed there. A device that executed what a file told it to would be a very
+// different and much worse thing.
+
+static void nikita_bridge_status(Storage* storage) {
+    FileInfo info;
+    if(storage_common_stat(storage, NIKITA_BRIDGE_REQ, &info) == FSE_OK) {
+        printf("request  : %lu bytes waiting\r\n", (unsigned long)info.size);
+    } else {
+        printf("request  : none\r\n");
+    }
+    if(storage_common_stat(storage, NIKITA_BRIDGE_RES, &info) == FSE_OK) {
+        printf("response : %lu bytes\r\n", (unsigned long)info.size);
+    } else {
+        printf("response : none\r\n");
+    }
+}
+
+// Print a pending request and delete it in the same breath, so a request is
+// handed to exactly one reader and never run twice.
+static void nikita_bridge_poll(Storage* storage) {
+    Stream* stream = file_stream_alloc(storage);
+    if(!file_stream_open(stream, NIKITA_BRIDGE_REQ, FSAM_READ, FSOM_OPEN_EXISTING)) {
+        file_stream_close(stream);
+        stream_free(stream);
+        printf("(no request)\r\n");
+        return;
+    }
+    FuriString* line = furi_string_alloc();
+    while(stream_read_line(stream, line)) {
+        printf("%s", furi_string_get_cstr(line));
+    }
+    furi_string_free(line);
+    file_stream_close(stream);
+    stream_free(stream);
+    printf("\r\n");
+
+    // Consumed: drop it so the next poll does not replay the same request.
+    storage_common_remove(storage, NIKITA_BRIDGE_REQ);
+}
+
+static void nikita_bridge_clear(Storage* storage) {
+    storage_common_remove(storage, NIKITA_BRIDGE_REQ);
+    storage_common_remove(storage, NIKITA_BRIDGE_RES);
+    printf("mailbox cleared.\r\n");
+}
+
+static void nikita_bridge(Storage* storage, FuriString* args) {
+    FuriString* sub = furi_string_alloc();
+    if(!args_read_string_and_trim(args, sub) || furi_string_cmp(sub, "status") == 0) {
+        nikita_bridge_status(storage);
+    } else if(furi_string_cmp(sub, "poll") == 0) {
+        nikita_bridge_poll(storage);
+    } else if(furi_string_cmp(sub, "clear") == 0) {
+        nikita_bridge_clear(storage);
+    } else {
+        printf("usage: nikita bridge <status|poll|clear>\r\n");
+    }
+    furi_string_free(sub);
+}
+
 static void nikita_memory(Storage* storage, FuriString* args) {
     FuriString* subcommand = furi_string_alloc();
 
@@ -255,6 +335,8 @@ static void execute(PipeSide* pipe, FuriString* args, void* context) {
         }
     } else if(furi_string_cmp(command, "memory") == 0) {
         nikita_memory(storage, args);
+    } else if(furi_string_cmp(command, "bridge") == 0) {
+        nikita_bridge(storage, args);
     } else {
         nikita_print_usage(command);
     }
