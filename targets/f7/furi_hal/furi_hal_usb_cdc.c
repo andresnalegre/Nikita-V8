@@ -429,8 +429,10 @@ FuriHalUsbInterface usb_cdc_dual = {
     .cfg_descr = (void*)&cdc_cfg_desc_dual,
 };
 
-static void cdc_init(usbd_device* dev, FuriHalUsbInterface* intf, void* ctx) {
-    UNUSED(ctx);
+// Wire up CDC static state against a device without owning the usb config or
+// control callbacks. Used by the standalone cdc_init and, in the composite
+// device, by furi_hal_cdc_attach_to().
+static void cdc_attach(usbd_device* dev, FuriHalUsbInterface* intf) {
     usb_dev = dev;
     cdc_if_cur = intf;
 
@@ -455,11 +457,37 @@ static void cdc_init(usbd_device* dev, FuriHalUsbInterface* intf, void* ctx) {
 
     cdc_if_cur->str_prod_descr = dev_prod_desc;
     cdc_if_cur->str_serial_descr = dev_serial_desc;
+}
+
+static void cdc_init(usbd_device* dev, FuriHalUsbInterface* intf, void* ctx) {
+    UNUSED(ctx);
+    cdc_attach(dev, intf);
 
     usbd_reg_config(dev, cdc_ep_config);
     usbd_reg_control(dev, cdc_control);
 
     usbd_connect(dev, true);
+}
+
+/* Composite hooks (see furi_hal_usb_i.h) */
+void furi_hal_cdc_attach_to(usbd_device* dev, FuriHalUsbInterface* intf) {
+    cdc_attach(dev, intf);
+}
+
+usbd_respond furi_hal_cdc_ep_config(usbd_device* dev, uint8_t cfg) {
+    return cdc_ep_config(dev, cfg);
+}
+
+usbd_respond furi_hal_cdc_control(usbd_device* dev, usbd_ctlreq* req, usbd_rqc_callback* callback) {
+    return cdc_control(dev, req, callback);
+}
+
+void furi_hal_cdc_wakeup(usbd_device* dev) {
+    cdc_on_wakeup(dev);
+}
+
+void furi_hal_cdc_suspend(usbd_device* dev) {
+    cdc_on_suspend(dev);
 }
 
 static void cdc_deinit(usbd_device* dev) {

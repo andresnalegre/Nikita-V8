@@ -7,8 +7,11 @@
 #include "usb.h"
 #include "usb_hid.h"
 
-#define HID_EP_IN  0x81
-#define HID_EP_OUT 0x01
+// EP4 (not EP1) so HID can coexist with CDC in the composite device: CDC owns
+// EP1 OUT / EP2 IN / EP3 IN, so HID takes the free EP4 pair. Standalone HID is
+// unaffected -- it simply lives on EP4 instead of EP1.
+#define HID_EP_IN  0x84
+#define HID_EP_OUT 0x04
 #define HID_EP_SZ  0x10
 
 #define HID_INTERVAL 2
@@ -382,8 +385,11 @@ static void* hid_set_string_descr(char* str) {
     return dev_str_desc;
 }
 
-static void hid_init(usbd_device* dev, FuriHalUsbInterface* intf, void* ctx) {
-    UNUSED(intf);
+// Wire up HID static state against a device without owning the usb config or
+// control callbacks. Used directly by the standalone hid_init and, in the
+// composite device, by furi_hal_hid_attach_to() so the combined driver can
+// drive the config/control callbacks itself.
+static void hid_attach(usbd_device* dev, void* ctx) {
     FuriHalUsbHidConfig* cfg = (FuriHalUsbHidConfig*)ctx;
     if(hid_semaphore == NULL) hid_semaphore = furi_semaphore_alloc(1, 1);
     usb_dev = dev;
@@ -412,11 +418,41 @@ static void hid_init(usbd_device* dev, FuriHalUsbInterface* intf, void* ctx) {
             usb_hid.dev_descr->iProduct = UsbDevProduct;
         }
     }
+}
+
+static void hid_init(usbd_device* dev, FuriHalUsbInterface* intf, void* ctx) {
+    UNUSED(intf);
+    hid_attach(dev, ctx);
 
     usbd_reg_config(dev, hid_ep_config);
     usbd_reg_control(dev, hid_control);
 
     usbd_connect(dev, true);
+}
+
+/* Composite hooks (see furi_hal_usb_i.h) */
+void furi_hal_hid_attach_to(usbd_device* dev, void* ctx) {
+    hid_attach(dev, ctx);
+}
+
+usbd_respond furi_hal_hid_ep_config(usbd_device* dev, uint8_t cfg) {
+    return hid_ep_config(dev, cfg);
+}
+
+usbd_respond furi_hal_hid_control(usbd_device* dev, usbd_ctlreq* req, usbd_rqc_callback* callback) {
+    return hid_control(dev, req, callback);
+}
+
+void furi_hal_hid_wakeup(usbd_device* dev) {
+    hid_on_wakeup(dev);
+}
+
+void furi_hal_hid_suspend(usbd_device* dev) {
+    hid_on_suspend(dev);
+}
+
+uint16_t furi_hal_hid_report_desc_size(void) {
+    return (uint16_t)sizeof(hid_report_desc);
 }
 
 static void hid_deinit(usbd_device* dev) {

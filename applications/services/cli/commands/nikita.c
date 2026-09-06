@@ -17,11 +17,14 @@
 #include <furi_hal_version.h>
 #include <furi_hal_power.h>
 #include <furi_hal_bt.h>
+#include <furi_hal_usb.h>
+#include <furi_hal_usb_hid.h>
 #include <toolbox/args.h>
 #include <toolbox/version.h>
 #include <toolbox/stream/stream.h>
 #include <toolbox/stream/file_stream.h>
 #include <storage/storage.h>
+#include "nikita_bridge_payload.h"
 
 #define NIKITA_DIR         EXT_PATH("nikita")
 #define NIKITA_MEMORY_FILE NIKITA_DIR "/memory.txt"
@@ -61,7 +64,9 @@ static void nikita_print_usage(FuriString* args) {
            "  nikita memory clear         drop all of them\r\n"
            "  nikita bridge status        show the relay mailbox\r\n"
            "  nikita bridge poll          print a pending request and consume it\r\n"
-           "  nikita bridge clear         empty the mailbox\r\n");
+           "  nikita bridge clear         empty the mailbox\r\n"
+           "  nikita install flipper-bridge  type the bridge into this Mac\r\n"
+           "  nikita usb <cdc|hid|composite>  switch USB mode (composite = CDC+HID)\r\n");
 }
 
 static bool nikita_ensure_dirs(Storage* storage) {
@@ -235,6 +240,108 @@ static void nikita_memory_clear(Storage* storage) {
     }
 }
 
+// --- install the bridge on the host, by pretending to be a keyboard --------
+//
+// A zeroed machine has no way to run the bridge on its own, and the Flipper --
+// a USB device -- cannot reach into the host to run code. Except as a keyboard:
+// HID is the one channel a device drives the host with. So on an explicit
+// "nikita install flipper-bridge", the Flipper becomes a keyboard, opens a
+// terminal, types the bridge (embedded in the firmware, no download, no file to
+// lose) and starts it. This is the same mechanism as the Bad USB app that
+// already ships; here it is scoped to typing one thing -- this ecosystem's own
+// bridge -- and only when the user asks for it by name.
+//
+// macOS only for now: the terminal opener and `python3` are Apple-shaped.
+
+static void nikita_hid_tap(uint16_t key) {
+    // Retry until the report is actually accepted. furi_hal_hid_kb_press/
+    // release_all return false when the IN-endpoint semaphore times out (the
+    // host has not drained the previous report yet); a dropped press silently
+    // loses a character, and one lost character corrupts a typed script -- that
+    // is what turned "capture_output=True,text=True" into a syntax error. So we
+    // do not fire-and-forget: press and release each get bounded retries.
+    for(int i = 0; i < 50 && !furi_hal_hid_kb_press(key); i++) furi_delay_ms(4);
+    furi_delay_ms(6);
+    for(int i = 0; i < 50 && !furi_hal_hid_kb_release_all(); i++) furi_delay_ms(4);
+    furi_delay_ms(6);
+}
+
+static void nikita_hid_type(const char* text) {
+    for(const char* p = text; *p; p++) {
+        if(*p == '\n') {
+            nikita_hid_tap(HID_KEYBOARD_RETURN);
+            furi_delay_ms(12); // a terminal needs a breath after each line
+            continue;
+        }
+        uint16_t key = HID_ASCII_TO_KEY(*p);
+        if(key != HID_KEYBOARD_NONE) nikita_hid_tap(key);
+    }
+}
+
+static void nikita_install_macos(void) {
+    // Spotlight -> "Terminal" -> Enter. Cmd is LEFT_GUI.
+    nikita_hid_tap(KEY_MOD_LEFT_GUI | HID_KEYBOARD_SPACEBAR);
+    furi_delay_ms(700);
+    nikita_hid_type("Terminal");
+    furi_delay_ms(600); // let Spotlight resolve the result before Return
+    nikita_hid_tap(HID_KEYBOARD_RETURN);
+    furi_delay_ms(4500); // a cold Terminal launch needs well over 2.5s
+
+    // The first keystrokes after a cold launch get dropped while the window
+    // takes focus -- the original 2.5s wait lost the whole "cat > ... <<EOF"
+    // line and the start of the payload, so it fell into a raw shell and every
+    // line errored. Send a couple of harmless Returns first: they only make
+    // empty prompts, so it is those, not the heredoc opener, that get clipped.
+    nikita_hid_tap(HID_KEYBOARD_RETURN);
+    furi_delay_ms(250);
+    nikita_hid_tap(HID_KEYBOARD_RETURN);
+    furi_delay_ms(700);
+
+    // Write the bridge to a temp file with a quoted heredoc -- 'NIKITA_EOF' so
+    // the shell does not expand a thing inside it -- then start it detached.
+    nikita_hid_type("cat > /tmp/nikita_bridge.py <<'NIKITA_EOF'\n");
+    nikita_hid_type(NIKITA_BRIDGE_PAYLOAD);
+    nikita_hid_type("NIKITA_EOF\n");
+    nikita_hid_type(
+        "nohup python3 /tmp/nikita_bridge.py >/tmp/nikita_bridge.log 2>&1 &\n");
+}
+
+static void nikita_install(FuriString* args) {
+    FuriString* target = furi_string_alloc();
+    args_read_string_and_trim(args, target);
+    const bool is_bridge = furi_string_empty(target) ||
+                           furi_string_cmp(target, "flipper-bridge") == 0;
+    furi_string_free(target);
+    if(!is_bridge) {
+        printf("usage: nikita install flipper-bridge\r\n");
+        return;
+    }
+
+    if(furi_hal_usb_is_locked()) {
+        printf("USB is locked (a screen may be streaming). Try again.\r\n");
+        return;
+    }
+
+    printf("Installing the bridge on this Mac.\r\n");
+    printf("Leave the keyboard and mouse alone for ~30s -- the Flipper is about "
+           "to type it in.\r\n");
+    // The CLI link you typed this on drops while the Flipper is a keyboard and
+    // returns after. Let the message flush first.
+    furi_delay_ms(1500);
+
+    FuriHalUsbInterface* prev = furi_hal_usb_get_config();
+    if(!furi_hal_usb_set_config(&usb_hid, NULL)) {
+        furi_hal_usb_set_config(prev, NULL);
+        return;
+    }
+    furi_delay_ms(2200); // host enumerates the keyboard
+
+    nikita_install_macos();
+
+    furi_delay_ms(400);
+    furi_hal_usb_set_config(prev, NULL); // hand the serial link back
+}
+
 // --- relay mailbox --------------------------------------------------------
 //
 // Deliberately dumb: the firmware never runs anything the request asks for. It
@@ -318,6 +425,30 @@ static void nikita_memory(Storage* storage, FuriString* args) {
     furi_string_free(subcommand);
 }
 
+// USB mode switch, for testing the composite CDC+HID device. "composite" keeps
+// the serial CLI alive AND brings up an HID keyboard on the same cable.
+static void nikita_usb(FuriString* args) {
+    FuriString* mode = furi_string_alloc();
+    args_read_string_and_trim(args, mode);
+    FuriHalUsbInterface* target = NULL;
+    if(furi_string_cmp(mode, "composite") == 0) {
+        target = &usb_cdc_hid;
+    } else if(furi_string_cmp(mode, "hid") == 0) {
+        target = &usb_hid;
+    } else if(furi_string_cmp(mode, "cdc") == 0) {
+        target = &usb_cdc_single;
+    } else {
+        printf("usage: nikita usb <cdc|hid|composite>\r\n");
+        furi_string_free(mode);
+        return;
+    }
+    printf("switching USB to %s (CDC stays up in composite)...\r\n",
+           furi_string_get_cstr(mode));
+    furi_string_free(mode);
+    furi_delay_ms(200); // let the line flush before re-enumerating
+    furi_hal_usb_set_config(target, NULL);
+}
+
 static void execute(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(context);
@@ -337,6 +468,10 @@ static void execute(PipeSide* pipe, FuriString* args, void* context) {
         nikita_memory(storage, args);
     } else if(furi_string_cmp(command, "bridge") == 0) {
         nikita_bridge(storage, args);
+    } else if(furi_string_cmp(command, "install") == 0) {
+        nikita_install(args);
+    } else if(furi_string_cmp(command, "usb") == 0) {
+        nikita_usb(args);
     } else {
         nikita_print_usage(command);
     }
@@ -345,4 +480,4 @@ static void execute(PipeSide* pipe, FuriString* args, void* context) {
     furi_record_close(RECORD_STORAGE);
 }
 
-CLI_COMMAND_INTERFACE(nikita, execute, CliCommandFlagParallelSafe, 3072, CLI_APPID);
+CLI_COMMAND_INTERFACE(nikita, execute, CliCommandFlagParallelSafe, 4096, CLI_APPID);
