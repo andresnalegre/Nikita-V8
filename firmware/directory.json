@@ -7,14 +7,14 @@
       "versions": [
         {
           "version": "nkt-006",
-          "changelog": "Nikita firmware nkt-006: Bad USB runs alongside a qFlipper/CLI session (composite USB) -- no more 'Connection Is Active'. Full package bundles the apps, so the Bad USB fix ships with the firmware.",
-          "timestamp": 1788818862,
+          "changelog": "Nikita firmware nkt-006.",
+          "timestamp": 1788818903,
           "files": [
             {
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-006/flipper-z-f7-update-nkt-006.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "b8ecfadd5d1cfe5c7dbcb0a4ab9ead2f405b472402ace38f64f6ef1b50a7a41e"
+              "sha256": "0365b127364be9ad52be155dbb7a9d3d518ecb4a7100848933fa97b0018d5f05"
             }
           ]
         },
