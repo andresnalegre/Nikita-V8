@@ -169,8 +169,15 @@ static void cli_vcp_message_received(FuriEventLoopObject* object, void* context)
         cli_vcp->is_enabled = true;
 
         // switch usb mode
-        cli_vcp->previous_interface = furi_hal_usb_get_config();
-        furi_hal_usb_set_config(&usb_cdc_single, NULL);
+        // Composite CDC+HID as the base mode: keep the serial CLI up while an
+        // HID keyboard rides the same cable, so a BadUSB run no longer kills the
+        // serial/bridge. previous_interface is pinned to composite (not the
+        // config captured here) so the disable/re-enable that namechanger and
+        // desktop do at boot stays on composite -- set_config to the current
+        // mode is a no-op, so there is no composite->single->composite churn for
+        // the host to enumerate mid-flight.
+        cli_vcp->previous_interface = &usb_cdc_hid;
+        furi_hal_usb_set_config(&usb_cdc_hid, NULL);
         furi_hal_cdc_set_callbacks(VCP_IF_NUM, &cdc_callbacks, cli_vcp);
         break;
 
