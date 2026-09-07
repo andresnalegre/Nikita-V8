@@ -15,13 +15,22 @@ void hid_usb_adjust_config(BadUsbHidConfig* hid_cfg) {
 
 void* hid_usb_init(BadUsbHidConfig* hid_cfg) {
     hid_usb_adjust_config(hid_cfg);
-    furi_check(furi_hal_usb_set_config(&usb_hid, &hid_cfg->usb));
+    // Nikita multitasking: type over the COMPOSITE HID (usb_cdc_hid) instead of
+    // plain usb_hid, so the CDC serial / CLI stays connected while BadUSB runs.
+    // furi_hal_hid_kb_press() sends on the composite's HID endpoint just the
+    // same. If composite is already the active mode (the default) this is a
+    // no-op and nothing re-enumerates, so the serial link never drops.
+    // Trade-off: the composite device descriptor fixes VID/PID, so the app's
+    // custom USB VID/PID/name is not applied in this mode.
+    furi_check(furi_hal_usb_set_config(&usb_cdc_hid, NULL));
     return NULL;
 }
 
 void hid_usb_deinit(void* inst) {
     UNUSED(inst);
-    furi_check(furi_hal_usb_set_config(NULL, NULL));
+    // Do NOT tear the USB down here -- keep the composite up so the CLI survives
+    // a script stopping. The app restores the previous mode on exit anyway.
+    furi_check(furi_hal_usb_set_config(&usb_cdc_hid, NULL));
 }
 
 void hid_usb_set_state_callback(void* inst, HidStateCallback cb, void* context) {

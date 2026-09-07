@@ -243,7 +243,11 @@ BadUsbApp* bad_usb_app_alloc(char* arg) {
         scene_manager_next_scene(app->scene_manager, BadUsbSceneError);
     } else {
         app->usb_if_prev = furi_hal_usb_get_config();
-        furi_check(furi_hal_usb_set_config(NULL, NULL));
+        // Nikita multitasking: don't drop USB when BadUSB opens. Bring up (or
+        // stay on) the composite CDC+HID so the CLI serial keeps working the
+        // whole time the app is open. If composite is already active this is a
+        // no-op and the link never re-enumerates.
+        furi_check(furi_hal_usb_set_config(&usb_cdc_hid, NULL));
 
         if(!furi_string_empty(app->file_path)) {
             scene_manager_set_scene_state(app->scene_manager, BadUsbSceneWork, true);
