@@ -237,17 +237,29 @@ BadUsbApp* bad_usb_app_alloc(char* arg) {
 
     view_dispatcher_attach_to_gui(app->view_dispatcher, app->gui, ViewDispatcherTypeFullscreen);
 
-    if(furi_hal_usb_is_locked()) {
+    // Nikita multitasking: the stock guard refused Bad USB whenever an RPC/CLI
+    // session held the USB, because switching to plain HID would tear down that
+    // session's CDC. In composite mode the HID rides ALONGSIDE the CDC, so Bad
+    // USB can run with qFlipper / a CLI (`screen`) session still connected.
+    // Only refuse when the USB is locked AND we are not already composite (e.g.
+    // an RPC session pinned plain CDC, where HID really would kill it).
+    if(furi_hal_usb_is_locked() && furi_hal_usb_get_config() != &usb_cdc_hid) {
         app->error = BadUsbAppErrorCloseRpc;
         app->usb_if_prev = NULL;
         scene_manager_next_scene(app->scene_manager, BadUsbSceneError);
     } else {
         app->usb_if_prev = furi_hal_usb_get_config();
-        // Nikita multitasking: don't drop USB when BadUSB opens. Bring up (or
-        // stay on) the composite CDC+HID so the CLI serial keeps working the
-        // whole time the app is open. If composite is already active this is a
-        // no-op and the link never re-enumerates.
-        furi_check(furi_hal_usb_set_config(&usb_cdc_hid, NULL));
+        // Already composite (the default, possibly locked by an RPC session)?
+        // Touch NOTHING: a set_config would re-enumerate -- killing an open
+        // `screen`/CLI -- and under the RPC lock it would fail and abort the
+        // furi_check. The composite HID is already live, so just use it. Only
+        // switch when we are not composite yet, and then we are not locked (the
+        // guard above handled locked+non-composite), so the switch is safe.
+        if(app->usb_if_prev != &usb_cdc_hid) {
+            furi_check(furi_hal_usb_set_config(&usb_cdc_hid, NULL));
+        } else {
+            app->usb_if_prev = NULL; // nothing changed -> nothing to restore
+        }
 
         if(!furi_string_empty(app->file_path)) {
             scene_manager_set_scene_state(app->scene_manager, BadUsbSceneWork, true);
