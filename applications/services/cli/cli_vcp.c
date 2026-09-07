@@ -168,14 +168,11 @@ static void cli_vcp_message_received(FuriEventLoopObject* object, void* context)
         FURI_LOG_D(TAG, "Enabling");
         cli_vcp->is_enabled = true;
 
-        // switch usb mode
-        // Composite CDC+HID as the base mode: keep the serial CLI up while an
-        // HID keyboard rides the same cable, so a BadUSB run no longer kills the
-        // serial/bridge. previous_interface is pinned to composite (not the
-        // config captured here) so the disable/re-enable that namechanger and
-        // desktop do at boot stays on composite -- set_config to the current
-        // mode is a no-op, so there is no composite->single->composite churn for
-        // the host to enumerate mid-flight.
+        // Multitasking base mode: bring the composite CDC+HID up ONCE. The
+        // serial CLI and an HID keyboard live on the same cable, so a BadUSB
+        // run no longer tears the serial/bridge down. previous_interface is the
+        // composite too, so any re-enable lands on the same mode and
+        // furi_hal_usb_set_config is a no-op -- no re-enumeration.
         cli_vcp->previous_interface = &usb_cdc_hid;
         furi_hal_usb_set_config(&usb_cdc_hid, NULL);
         furi_hal_cdc_set_callbacks(VCP_IF_NUM, &cdc_callbacks, cli_vcp);
@@ -186,9 +183,14 @@ static void cli_vcp_message_received(FuriEventLoopObject* object, void* context)
         FURI_LOG_D(TAG, "Disabling");
         cli_vcp->is_enabled = false;
 
-        // restore usb mode
-        furi_hal_cdc_set_callbacks(VCP_IF_NUM, NULL, NULL);
-        furi_hal_usb_set_config(cli_vcp->previous_interface, NULL);
+        // Deliberately do NOT drop the USB mode or clear the CDC callbacks. The
+        // composite has to stay up continuously: the disable+enable that
+        // namechanger and desktop fire at boot used to drop to the previous
+        // mode and switch back, and the host would enumerate right in the
+        // middle of that churn and land on a half-open CDC. Keeping the mode
+        // and callbacks put means those calls cost nothing and the CDC never
+        // flickers. Anything that genuinely needs the bus (usb_uart, BadUSB)
+        // sets its own config, which overrides this regardless.
         break;
     }
 
