@@ -6,6 +6,19 @@
       "description": "Stable Nikita firmware. Recommended.",
       "versions": [
         {
+          "version": "nkt-005",
+          "changelog": "Nikita firmware nkt-005: Bad USB runs over the composite USB (CDC + HID) so opening/running Bad USB no longer drops the CLI serial.",
+          "timestamp": 1788815549,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-005/flipper-z-f7-update-nkt-005.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "a0dbb8c39bd564b8d413b5d78ee16109df9eb5731d39abad34bf45a4cb8c27a4"
+            }
+          ]
+        },
+        {
           "version": "nkt-004",
           "changelog": "Nikita firmware nkt-004.",
           "timestamp": 1788800112,
