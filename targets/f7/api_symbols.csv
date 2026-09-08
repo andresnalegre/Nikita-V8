@@ -1,5 +1,5 @@
 entry,status,name,type,params
-Version,+,89.1,,
+Version,+,89.2,,
 Header,+,applications/drivers/subghz/cc1101_ext/cc1101_ext_interconnect.h,,
 Header,+,applications/services/applications.h,,
 Header,+,applications/services/bt/bt_service/bt.h,,
@@ -973,6 +973,9 @@ Function,+,cli_shell_join,void,CliShell*
 Function,+,cli_shell_set_prompt,void,"CliShell*, const char*"
 Function,+,cli_shell_start,void,CliShell*
 Function,+,cli_sleep,_Bool,"PipeSide*, uint32_t"
+Function,+,cli_vcp_capture_begin,void,
+Function,+,cli_vcp_capture_end,void,
+Function,+,cli_vcp_capture_read,size_t,"uint8_t*, size_t, uint32_t"
 Function,+,cli_vcp_disable,void,CliVcp*
 Function,+,cli_vcp_enable,void,CliVcp*
 Function,+,composite_api_resolver_add,void,"CompositeApiResolver*, const ElfApiInterface*"

@@ -84,7 +84,23 @@ static void cli_vcp_maybe_send_data(CliVcp* cli_vcp) {
  *   - new data arrived at the endpoint;
  *   - data was read out of the pipe.
  */
+// Active-recon capture. While cli_vcp_capture_stream is set, incoming CDC bytes
+// go here instead of to the CLI shell -- see cli_vcp_capture_begin().
+static FuriStreamBuffer* volatile cli_vcp_capture_stream = NULL;
+
 static void cli_vcp_maybe_receive_data(CliVcp* cli_vcp) {
+    // Capture mode: pull the bytes straight off the endpoint into the capture
+    // buffer, bypassing the CLI pipe (and its space check) entirely, so the
+    // recon output never reaches the shell and never stalls for want of pipe
+    // room while the shell is blocked in the recon command.
+    FuriStreamBuffer* capture = cli_vcp_capture_stream;
+    if(capture) {
+        uint8_t buf[USB_CDC_PKT_LEN];
+        size_t length = furi_hal_cdc_receive(VCP_IF_NUM, buf, sizeof(buf));
+        if(length) furi_stream_buffer_send(capture, buf, length, 0);
+        return;
+    }
+
     if(!cli_vcp->own_pipe) return;
     if(pipe_spaces_available(cli_vcp->own_pipe) < USB_CDC_PKT_LEN) return;
 
@@ -92,6 +108,23 @@ static void cli_vcp_maybe_receive_data(CliVcp* cli_vcp) {
     size_t length = furi_hal_cdc_receive(VCP_IF_NUM, buf, sizeof(buf));
     VCP_TRACE(TAG, "cdc_receive length=%zu", length);
     furi_check(pipe_send(cli_vcp->own_pipe, buf, length) == length);
+}
+
+void cli_vcp_capture_begin(void) {
+    if(cli_vcp_capture_stream) return; // one at a time
+    cli_vcp_capture_stream = furi_stream_buffer_alloc(4096, 1);
+}
+
+size_t cli_vcp_capture_read(uint8_t* buffer, size_t size, uint32_t timeout_ms) {
+    FuriStreamBuffer* capture = cli_vcp_capture_stream;
+    if(!capture) return 0;
+    return furi_stream_buffer_receive(capture, buffer, size, timeout_ms);
+}
+
+void cli_vcp_capture_end(void) {
+    FuriStreamBuffer* capture = cli_vcp_capture_stream;
+    cli_vcp_capture_stream = NULL;
+    if(capture) furi_stream_buffer_free(capture);
 }
 
 // =============
