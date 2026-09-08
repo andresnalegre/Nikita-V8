@@ -4,6 +4,7 @@
 #include <furi_hal_bt.h>
 #include <furi_hal_crypto.h>
 #include <furi_hal_rtc.h>
+#include <furi_hal_usb.h>
 
 #include <interface/patterns/ble_thread/shci/shci.h>
 #include <furi.h>
@@ -354,6 +355,47 @@ void furi_hal_info_get(PropertyValueCallback out, char sep, void* context) {
         &property_context, "%u", 3, "system", "locale", "unit", furi_hal_rtc_get_locale_units());
     property_value_out(
         &property_context, "%u", 3, "system", "log", "level", furi_hal_rtc_get_log_level());
+
+    // Nikita: passive USB host fingerprint. Emitting it here means the phone
+    // reads over BLE (via RPC device_info) exactly what the Flipper sees plugged
+    // in -- the same data as `nikita host`, with no bridge needed.
+    FuriHalUsbHostFingerprint host_fp = furi_hal_usb_get_host_fingerprint();
+    const char* host_os_str = "unknown";
+    switch(host_fp.os) {
+    case FuriHalUsbHostOsWindows:
+        host_os_str = "windows";
+        break;
+    case FuriHalUsbHostOsMacos:
+        host_os_str = "macos";
+        break;
+    case FuriHalUsbHostOsLinux:
+        host_os_str = "linux";
+        break;
+    default:
+        break;
+    }
+    property_value_out(&property_context, NULL, 3, "usb", "host", "os", host_os_str);
+    property_value_out(
+        &property_context, "%d", 3, "usb", "host", "msos",
+        host_fp.ms_os_string_requested ? 1 : 0);
+    property_value_out(
+        &property_context, "%d", 3, "usb", "host", "serial", host_fp.serial_requested ? 1 : 0);
+    property_value_out(
+        &property_context, "%d", 3, "usb", "host", "product", host_fp.product_requested ? 1 : 0);
+    property_value_out(
+        &property_context, "%d", 3, "usb", "host", "manuf", host_fp.manuf_requested ? 1 : 0);
+    property_value_out(
+        &property_context, "%u", 3, "usb", "host", "devdesc",
+        (unsigned)host_fp.device_desc_requests);
+    property_value_out(
+        &property_context, "%u", 3, "usb", "host", "cfgdesc",
+        (unsigned)host_fp.config_desc_requests);
+    property_value_out(
+        &property_context, "%u", 3, "usb", "host", "strreq",
+        (unsigned)host_fp.string_requests);
+    property_value_out(
+        &property_context, "%u", 3, "usb", "host", "firstwlen",
+        (unsigned)host_fp.first_device_desc_wlength);
 
     property_value_out(
         &property_context, "%u", 3, "protobuf", "version", "major", PROTOBUF_MAJOR_VERSION);
