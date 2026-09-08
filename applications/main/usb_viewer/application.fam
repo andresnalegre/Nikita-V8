@@ -1,0 +1,10 @@
+App(
+    appid="usb_viewer",
+    name="USB Viewer",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="usb_viewer_app",
+    requires=["gui"],
+    stack_size=2 * 1024,
+    fap_category="USB",
+    fap_description="Show the host OS the Flipper is plugged into (Scan Viewer)",
+)

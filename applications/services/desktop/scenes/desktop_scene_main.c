@@ -160,8 +160,12 @@ bool desktop_scene_main_on_event(void* context, SceneManagerEvent event) {
             consumed = true;
             break;
         case DesktopMainEventOpenFavoriteLeftLong:
-            desktop_scene_main_start_favorite(
-                desktop, &desktop->settings.favorite_apps[FavoriteAppLeftLong]);
+            // Nikita: hold LEFT opens the USB Host Viewer instead of the left
+            // favorite -- the Flipper-side Scan Viewer (host OS + enumeration
+            // signals). Launched by path so a fault in it never touches the
+            // desktop.
+            loader_start_detached_with_gui_error(
+                desktop->loader, "/ext/apps/USB/usb_viewer.fap", NULL);
             consumed = true;
             break;
         case DesktopMainEventOpenFavoriteRightShort:
