@@ -241,6 +241,13 @@ void furi_hal_usb_set_state_callback(FuriHalUsbStateCallback cb, void* ctx) {
     furi_hal_usb_send_message(&msg);
 }
 
+/* Passive host-OS fingerprint: what the host asked for during enumeration.
+ * Windows uniquely fetches the Microsoft OS String Descriptor (string 0xEE);
+ * macOS/Linux differ in which of the normal strings they pull. Recorded here,
+ * classified in furi_hal_usb_get_host_fingerprint(). */
+#define USB_MS_OS_STRING_INDEX 0xEE
+static FuriHalUsbHostFingerprint furi_hal_usb_host_fp = {0};
+
 /* Get device / configuration descriptors */
 static usbd_respond usb_descriptor_get(usbd_ctlreq* req, void** address, uint16_t* length) {
     const uint8_t dtype = req->wValue >> 8;
@@ -251,6 +258,10 @@ static usbd_respond usb_descriptor_get(usbd_ctlreq* req, void** address, uint16_
 
     switch(dtype) {
     case USB_DTYPE_DEVICE:
+        if(furi_hal_usb_host_fp.device_desc_requests == 0) {
+            furi_hal_usb_host_fp.first_device_desc_wlength = req->wLength;
+        }
+        furi_hal_usb_host_fp.device_desc_requests++;
         furi_thread_flags_set(furi_thread_get_id(usb.thread), UsbEventRequest);
         if(usb.callback != NULL) {
             usb.callback(FuriHalUsbStateEventDescriptorRequest, usb.callback_context);
@@ -258,17 +269,28 @@ static usbd_respond usb_descriptor_get(usbd_ctlreq* req, void** address, uint16_
         desc = usb.interface->dev_descr;
         break;
     case USB_DTYPE_CONFIGURATION:
+        furi_hal_usb_host_fp.config_desc_requests++;
         desc = usb.interface->cfg_descr;
         len = ((struct usb_string_descriptor*)(usb.interface->cfg_descr))->wString[0];
         break;
     case USB_DTYPE_STRING:
+        furi_hal_usb_host_fp.string_requests++;
+        if(dnumber == USB_MS_OS_STRING_INDEX) {
+            /* Only Windows asks for this. We do not serve it -- recording the
+             * request is the whole point of catching it here. */
+            furi_hal_usb_host_fp.ms_os_string_requested = true;
+            return usbd_fail;
+        }
         if(dnumber == UsbDevLang) {
             desc = &dev_lang_desc;
         } else if((dnumber == UsbDevManuf) && (usb.interface->str_manuf_descr != NULL)) {
+            furi_hal_usb_host_fp.manuf_requested = true;
             desc = usb.interface->str_manuf_descr;
         } else if((dnumber == UsbDevProduct) && (usb.interface->str_prod_descr != NULL)) {
+            furi_hal_usb_host_fp.product_requested = true;
             desc = usb.interface->str_prod_descr;
         } else if((dnumber == UsbDevSerial) && (usb.interface->str_serial_descr != NULL)) {
+            furi_hal_usb_host_fp.serial_requested = true;
             desc = usb.interface->str_serial_descr;
         } else
             return usbd_fail;
@@ -284,6 +306,30 @@ static usbd_respond usb_descriptor_get(usbd_ctlreq* req, void** address, uint16_
     *address = (void*)desc;
     *length = len;
     return usbd_ack;
+}
+
+FuriHalUsbHostFingerprint furi_hal_usb_get_host_fingerprint(void) {
+    FuriHalUsbHostFingerprint fp = furi_hal_usb_host_fp;
+    /* Classify from the raw signals. Windows is the only one that fetches the
+     * MS OS string (0xEE), so that is a hard signal. macOS vs Linux is a
+     * heuristic from which normal strings were pulled -- macOS reads the serial
+     * and product strings during enumeration, the Linux cdc_acm path typically
+     * does not. Best-effort; the raw counters travel with it so callers can
+     * refine. */
+    if(fp.ms_os_string_requested) {
+        fp.os = FuriHalUsbHostOsWindows;
+    } else if(fp.serial_requested && fp.product_requested) {
+        fp.os = FuriHalUsbHostOsMacos;
+    } else if(fp.device_desc_requests > 0 || fp.config_desc_requests > 0) {
+        fp.os = FuriHalUsbHostOsLinux;
+    } else {
+        fp.os = FuriHalUsbHostOsUnknown;
+    }
+    return fp;
+}
+
+void furi_hal_usb_reset_host_fingerprint(void) {
+    furi_hal_usb_host_fp = (FuriHalUsbHostFingerprint){0};
 }
 
 static void reset_evt(usbd_device* dev, uint8_t event, uint8_t ep) {

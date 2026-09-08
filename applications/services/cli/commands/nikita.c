@@ -66,7 +66,9 @@ static void nikita_print_usage(FuriString* args) {
            "  nikita bridge poll          print a pending request and consume it\r\n"
            "  nikita bridge clear         empty the mailbox\r\n"
            "  nikita install flipper-bridge  type the bridge into this Mac\r\n"
-           "  nikita usb <cdc|hid|composite>  switch USB mode (composite = CDC+HID)\r\n");
+           "  nikita usb <cdc|hid|composite>  switch USB mode (composite = CDC+HID)\r\n"
+           "  nikita host                 guess the host OS from how it enumerated us\r\n"
+           "  nikita host reset           clear the fingerprint before a re-plug\r\n");
 }
 
 static bool nikita_ensure_dirs(Storage* storage) {
@@ -449,6 +451,44 @@ static void nikita_usb(FuriString* args) {
     furi_hal_usb_set_config(target, NULL);
 }
 
+static const char* nikita_host_os_name(FuriHalUsbHostOs os) {
+    switch(os) {
+    case FuriHalUsbHostOsWindows:
+        return "windows";
+    case FuriHalUsbHostOsMacos:
+        return "macos";
+    case FuriHalUsbHostOsLinux:
+        return "linux";
+    default:
+        return "unknown";
+    }
+}
+
+// Passive host-OS fingerprint from how the host enumerated us. Machine-readable
+// key=value lines so the app can parse it straight off BLE/serial.
+// `nikita host reset` clears it before a re-plug to rescan.
+static void nikita_host(FuriString* args) {
+    FuriString* sub = furi_string_alloc();
+    if(args_read_string_and_trim(args, sub) && furi_string_cmp(sub, "reset") == 0) {
+        furi_hal_usb_reset_host_fingerprint();
+        printf("reset=1 (re-plug or re-enumerate to rescan)\r\n");
+        furi_string_free(sub);
+        return;
+    }
+    furi_string_free(sub);
+
+    FuriHalUsbHostFingerprint fp = furi_hal_usb_get_host_fingerprint();
+    printf("os=%s\r\n", nikita_host_os_name(fp.os));
+    printf("ms_os_string=%d\r\n", fp.ms_os_string_requested ? 1 : 0);
+    printf("serial_req=%d\r\n", fp.serial_requested ? 1 : 0);
+    printf("product_req=%d\r\n", fp.product_requested ? 1 : 0);
+    printf("manuf_req=%d\r\n", fp.manuf_requested ? 1 : 0);
+    printf("device_desc_req=%u\r\n", (unsigned)fp.device_desc_requests);
+    printf("config_desc_req=%u\r\n", (unsigned)fp.config_desc_requests);
+    printf("string_req=%u\r\n", (unsigned)fp.string_requests);
+    printf("first_dev_wlen=%u\r\n", (unsigned)fp.first_device_desc_wlength);
+}
+
 static void execute(PipeSide* pipe, FuriString* args, void* context) {
     UNUSED(pipe);
     UNUSED(context);
@@ -472,6 +512,8 @@ static void execute(PipeSide* pipe, FuriString* args, void* context) {
         nikita_install(args);
     } else if(furi_string_cmp(command, "usb") == 0) {
         nikita_usb(args);
+    } else if(furi_string_cmp(command, "host") == 0) {
+        nikita_host(args);
     } else {
         nikita_print_usage(command);
     }

@@ -1,5 +1,5 @@
 entry,status,name,type,params
-Version,+,89.0,,
+Version,+,89.1,,
 Header,+,applications/drivers/subghz/cc1101_ext/cc1101_ext_interconnect.h,,
 Header,+,applications/services/applications.h,,
 Header,+,applications/services/bt/bt_service/bt.h,,
@@ -1884,10 +1884,12 @@ Function,+,furi_hal_switch,void,void*
 Function,+,furi_hal_usb_disable,void,
 Function,+,furi_hal_usb_enable,void,
 Function,+,furi_hal_usb_get_config,FuriHalUsbInterface*,
+Function,+,furi_hal_usb_get_host_fingerprint,FuriHalUsbHostFingerprint,
 Function,-,furi_hal_usb_init,void,
 Function,+,furi_hal_usb_is_locked,_Bool,
 Function,+,furi_hal_usb_lock,void,
 Function,+,furi_hal_usb_reinit,void,
+Function,+,furi_hal_usb_reset_host_fingerprint,void,
 Function,+,furi_hal_usb_set_config,_Bool,"FuriHalUsbInterface*, void*"
 Function,+,furi_hal_usb_set_state_callback,void,"FuriHalUsbStateCallback, void*"
 Function,+,furi_hal_usb_unlock,void,
