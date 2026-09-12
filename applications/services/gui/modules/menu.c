@@ -85,25 +85,22 @@ static void menu_draw_callback(Canvas* canvas, void* _model) {
         MenuItem* item;
         size_t shift_position;
 
-        // Selected item's name, centered along the top.
-        canvas_set_font(canvas, FontPrimary);
-        item = MenuItemArray_get(model->items, position);
-        canvas_draw_str_aligned(canvas, 64, 12, AlignCenter, AlignCenter, item->label);
-
-        // A row of five icons: two either side of the centered selection. The
-        // modulo wraps, so the row is continuous even near the ends.
         const int32_t center_x = 64;
-        const int32_t row_y = 38;
+        const int32_t row_y = 42;
         const int32_t pitch = 30;
+
+        // The row of icons first, so the title bar and its pointer sit cleanly
+        // on top. Five slots: two either side of the centered selection, the
+        // modulo wrapping so the row stays continuous at the ends.
         for(int8_t i = -2; i <= 2; i++) {
             shift_position = (position + items_count + i) % items_count;
             item = MenuItemArray_get(model->items, shift_position);
 
             if(i == 0) {
-                // Selected: a bold, larger cell, lifted a little.
-                const size_t w = 30, h = 30;
+                // Selected: a bold, larger cell.
+                const size_t w = 32, h = 32;
                 int32_t cx = center_x;
-                int32_t cy = row_y - 2;
+                int32_t cy = row_y;
                 elements_bold_rounded_frame(canvas, cx - w / 2, cy - h / 2, w, h);
                 menu_centered_icon(canvas, item, cx - w / 2, cy - h / 2, w, h);
             } else {
@@ -115,7 +112,24 @@ static void menu_draw_callback(Canvas* canvas, void* _model) {
             }
         }
 
-        menu_scrollbar_horizontal(canvas, 2, 61, 124, position, items_count);
+        // Title bar across the top, carrying the selected item's name, with a
+        // small pointer notched into its underside aimed at the selected icon.
+        // This is the piece that lifts the menu out of "a plain row of boxes"
+        // -- the Momentum silhouette, drawn clean and without the console text.
+        item = MenuItemArray_get(model->items, position);
+        elements_bold_rounded_frame(canvas, 0, 0, 128, 17);
+        canvas_set_font(canvas, FontPrimary);
+        canvas_draw_str_aligned(canvas, 64, 8, AlignCenter, AlignCenter, item->label);
+
+        // Pointer: two black edges down to a tip, the bar's bottom line erased
+        // between them so it reads as one shape opening toward the icon.
+        canvas_draw_line(canvas, 60, 16, 64, 23);
+        canvas_draw_line(canvas, 64, 23, 68, 16);
+        canvas_set_color(canvas, ColorWhite);
+        canvas_draw_line(canvas, 61, 16, 67, 16);
+        canvas_set_color(canvas, ColorBlack);
+
+        menu_scrollbar_horizontal(canvas, 2, 62, 124, position, items_count);
     } else {
         canvas_draw_str_aligned(canvas, 64, 32, AlignCenter, AlignCenter, "Empty");
     }
