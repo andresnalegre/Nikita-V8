@@ -168,17 +168,22 @@ static void viewer_deep_scan(FuriString* out) {
     viewer_tap(HID_KEYBOARD_RETURN);
     furi_delay_ms(700);
 
-    // Gather the facts and redirect the lot to our own serial. The glob matches
-    // only the Flipper's CDC device; markers bracket the payload so we know when
-    // it is complete.
+    // Hold our serial open on fd 3 for the whole batch: opening once (DTR stays
+    // asserted) is far more reliable than a bare `> device` that opens and
+    // closes per write. Give the port a moment to settle after opening.
+    viewer_type("exec 3>/dev/cu.usbmodemflip* 2>/dev/null\n");
+    furi_delay_ms(900);
+    // Gather the facts, send them to the serial (>&3) AND tee to a host file so
+    // we can tell "commands ran but capture missed" from "commands never ran".
+    // Markers bracket the payload so we know when it is complete.
     viewer_type(
         "{ echo ===NIKITA===; hostname; sw_vers; uname -a; whoami; id -un; "
         "sysctl -n hw.model; sysctl -n machdep.cpu.brand_string; "
-        "echo ===END===; } > /dev/cu.usbmodemflip* 2>/dev/null\n");
+        "echo ===END===; } 2>&1 | tee /tmp/nikita_recon.txt >&3\n");
 
     // Drain the capture until the end marker or a timeout.
     uint8_t rbuf[128];
-    uint32_t deadline = furi_get_tick() + furi_ms_to_ticks(6000);
+    uint32_t deadline = furi_get_tick() + furi_ms_to_ticks(8000);
     while(furi_get_tick() < deadline) {
         size_t n = cli_vcp_capture_read(rbuf, sizeof(rbuf), 400);
         if(n) {
@@ -194,9 +199,10 @@ static void viewer_deep_scan(FuriString* out) {
     if(furi_string_empty(out)) {
         furi_string_set(
             out,
-            "No output captured.\nThe host may be locked, may have\nno Terminal "
-            "focused, or something\nelse is holding the serial\n(close screen/"
-            "qFlipper first).");
+            "No output captured.\nCheck /tmp/nikita_recon.txt on the\nhost: if it "
+            "HAS the facts, the\ncommands ran but the serial\ncapture missed them "
+            "-- tell Nikita.\nIf it is EMPTY, the host was\nlocked / no Terminal "
+            "focused, or\nsomething else holds the serial.");
     } else {
         // Persist so the phone can read it over BLE.
         Storage* storage = furi_record_open(RECORD_STORAGE);
