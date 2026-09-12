@@ -1,6 +1,7 @@
 #include "menu.h"
 
 #include <gui/elements.h>
+#include <gui/icon_animation.h>
 #include <assets_icons.h>
 #include <furi.h>
 #include <m-array.h>
@@ -30,6 +31,49 @@ static void menu_process_up(Menu* menu);
 static void menu_process_down(Menu* menu);
 static void menu_process_ok(Menu* menu);
 
+// Nikita's main menu is horizontal: a row of icons with the selected one
+// centered and lifted, the name above it, and a dotted horizontal scrollbar
+// below. The idea is borrowed from Momentum's horizontal menus, but drawn as
+// Nikita's own -- a clean 1-bit layout with none of the console chrome, and
+// nothing pulled in beyond this file (no settings subsystem, no core GUI
+// additions), so it cannot disturb anything else in the firmware.
+
+// Draw an item's icon centered inside a w*h cell at (x, y).
+static void menu_centered_icon(
+    Canvas* canvas,
+    MenuItem* item,
+    int32_t x,
+    int32_t y,
+    size_t width,
+    size_t height) {
+    int32_t icon_w = icon_animation_get_width(item->icon);
+    int32_t icon_h = icon_animation_get_height(item->icon);
+    canvas_draw_icon_animation(
+        canvas,
+        x + ((int32_t)width - icon_w) / 2,
+        y + ((int32_t)height - icon_h) / 2,
+        item->icon);
+}
+
+// A dotted horizontal scrollbar with a position block, mirroring the vertical
+// one's look. Kept local so elements.c (and the SDK it exports) stay untouched.
+static void menu_scrollbar_horizontal(
+    Canvas* canvas,
+    int32_t x,
+    int32_t y,
+    size_t width,
+    size_t pos,
+    size_t total) {
+    for(size_t i = x; i < width + x; i += 2) {
+        canvas_draw_dot(canvas, i, y);
+    }
+    if(total) {
+        float block_w = ((float)width) / total;
+        canvas_draw_box(
+            canvas, x + (int32_t)(block_w * pos), y - 1, MAX((int32_t)block_w, 1), 3);
+    }
+}
+
 static void menu_draw_callback(Canvas* canvas, void* _model) {
     MenuModel* model = _model;
 
@@ -40,30 +84,40 @@ static void menu_draw_callback(Canvas* canvas, void* _model) {
     if(items_count) {
         MenuItem* item;
         size_t shift_position;
-        // First line
-        canvas_set_font(canvas, FontSecondary);
-        shift_position = (0 + position + items_count - 1) % items_count;
-        item = MenuItemArray_get(model->items, shift_position);
-        canvas_draw_icon_animation(canvas, 4, 3, item->icon);
-        canvas_draw_str(canvas, 22, 14, item->label);
-        // Second line main
+
+        // Selected item's name, centered along the top.
         canvas_set_font(canvas, FontPrimary);
-        shift_position = (1 + position + items_count - 1) % items_count;
-        item = MenuItemArray_get(model->items, shift_position);
-        canvas_draw_icon_animation(canvas, 4, 25, item->icon);
-        canvas_draw_str(canvas, 22, 36, item->label);
-        // Third line
-        canvas_set_font(canvas, FontSecondary);
-        shift_position = (2 + position + items_count - 1) % items_count;
-        item = MenuItemArray_get(model->items, shift_position);
-        canvas_draw_icon_animation(canvas, 4, 47, item->icon);
-        canvas_draw_str(canvas, 22, 58, item->label);
-        // Frame and scrollbar
-        elements_frame(canvas, 0, 21, 128 - 5, 21);
-        elements_scrollbar(canvas, position, items_count);
+        item = MenuItemArray_get(model->items, position);
+        canvas_draw_str_aligned(canvas, 64, 12, AlignCenter, AlignCenter, item->label);
+
+        // A row of five icons: two either side of the centered selection. The
+        // modulo wraps, so the row is continuous even near the ends.
+        const int32_t center_x = 64;
+        const int32_t row_y = 38;
+        const int32_t pitch = 30;
+        for(int8_t i = -2; i <= 2; i++) {
+            shift_position = (position + items_count + i) % items_count;
+            item = MenuItemArray_get(model->items, shift_position);
+
+            if(i == 0) {
+                // Selected: a bold, larger cell, lifted a little.
+                const size_t w = 30, h = 30;
+                int32_t cx = center_x;
+                int32_t cy = row_y - 2;
+                elements_bold_rounded_frame(canvas, cx - w / 2, cy - h / 2, w, h);
+                menu_centered_icon(canvas, item, cx - w / 2, cy - h / 2, w, h);
+            } else {
+                const size_t w = 24, h = 26;
+                int32_t cx = center_x + pitch * i;
+                int32_t cy = row_y;
+                elements_slightly_rounded_frame(canvas, cx - w / 2, cy - h / 2, w, h);
+                menu_centered_icon(canvas, item, cx - w / 2, cy - h / 2, w, h);
+            }
+        }
+
+        menu_scrollbar_horizontal(canvas, 2, 61, 124, position, items_count);
     } else {
-        canvas_draw_str(canvas, 2, 32, "Empty");
-        elements_scrollbar(canvas, 0, 0);
+        canvas_draw_str_aligned(canvas, 64, 32, AlignCenter, AlignCenter, "Empty");
     }
 }
 
@@ -71,24 +125,18 @@ static bool menu_input_callback(InputEvent* event, void* context) {
     Menu* menu = context;
     bool consumed = false;
 
-    if(event->type == InputTypeShort) {
-        if(event->key == InputKeyUp) {
+    // The menu is horizontal, so Left/Right move through it. Up/Down are kept
+    // as aliases so nothing that still sends them (and muscle memory) breaks.
+    if(event->type == InputTypeShort || event->type == InputTypeRepeat) {
+        if(event->key == InputKeyLeft || event->key == InputKeyUp) {
             consumed = true;
             menu_process_up(menu);
-        } else if(event->key == InputKeyDown) {
+        } else if(event->key == InputKeyRight || event->key == InputKeyDown) {
             consumed = true;
             menu_process_down(menu);
-        } else if(event->key == InputKeyOk) {
+        } else if(event->key == InputKeyOk && event->type == InputTypeShort) {
             consumed = true;
             menu_process_ok(menu);
-        }
-    } else if(event->type == InputTypeRepeat) {
-        if(event->key == InputKeyUp) {
-            consumed = true;
-            menu_process_up(menu);
-        } else if(event->key == InputKeyDown) {
-            consumed = true;
-            menu_process_down(menu);
         }
     }
 
