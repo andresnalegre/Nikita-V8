@@ -172,7 +172,14 @@ if env["IS_BASE_FIRMWARE"]:
     manifest = fwenv.ManifestBuilder(
         "${RESOURCES_ROOT}/Manifest",
         GIT_UNIX_TIMESTAMP=get_git_commit_unix_timestamp(),
-        _EXTRA_DIST=[fwenv["DOLPHIN_EXTERNAL_OUT_DIR"]],
+        _EXTRA_DIST=[
+            fwenv["DOLPHIN_EXTERNAL_OUT_DIR"],
+            # Ships the host bridge on the SD at /ext/nikita/bridge.py, so the
+            # cross-platform relay travels with the firmware over OTA -- no
+            # download, no separate repo to fetch. The dir name becomes the
+            # /ext folder, exactly as dolphin/ does.
+            env.Dir("#/assets/resources/nikita"),
+        ],
     )
     fwenv.Replace(FW_RESOURCES_MANIFEST=manifest)
     fwenv.Alias("resources", manifest)
