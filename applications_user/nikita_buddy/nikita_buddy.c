@@ -40,7 +40,7 @@
 #define NB_REPLY_MAX 2048
 #define NB_POLL_MS 1000
 // After this many seconds with no reply, tell the user what is missing.
-#define NB_HINT_AFTER_S 8
+#define NB_HINT_AFTER_S 25
 
 typedef enum {
     NbViewMenu,
@@ -82,6 +82,9 @@ typedef struct {
 
 // Switch view and remember where we are, so Back knows menu-vs-subview.
 static void nb_switch(NikitaBuddy* app, NbView view);
+static void nb_text_done_cb(void* context);
+static void nb_open_text_input(NikitaBuddy* app);
+static void nb_ask_again_cb(GuiButtonType result, InputType type, void* context);
 
 // ---- Quick commands ------------------------------------------------------
 // Prompts you can send without typing. Kept short and genuinely useful on a
@@ -243,6 +246,10 @@ static void nb_show_result(NikitaBuddy* app) {
     FuriString* body = furi_string_alloc();
 
     if(app->answered) {
+        // A little chat context: what you asked, then Nikita's reply.
+        furi_string_cat_str(body, "> ");
+        furi_string_cat_str(body, app->prompt);
+        furi_string_cat_str(body, "\n\n");
         furi_string_cat_str(body, app->reply);
     } else {
         furi_string_cat_str(body, "Asked Nikita...\n\n\"");
@@ -263,14 +270,38 @@ static void nb_show_result(NikitaBuddy* app) {
         }
     }
 
+    // Leave room at the bottom for the Ask button once there is a reply.
     widget_add_text_scroll_element(
-        app->widget, 0, 0, 128, 64, furi_string_get_cstr(body));
+        app->widget, 0, 0, 128, app->answered ? 52 : 64, furi_string_get_cstr(body));
+    if(app->answered) {
+        widget_add_button_element(
+            app->widget, GuiButtonTypeCenter, "Ask", nb_ask_again_cb, app);
+    }
     furi_string_free(body);
 }
 
 static void nb_switch(NikitaBuddy* app, NbView view) {
     app->current_view = view;
     view_dispatcher_switch_to_view(app->view_dispatcher, view);
+}
+
+// Open the on-screen keyboard for a (follow-up) message. The relay keeps the
+// conversation context on its side, so this just needs to send the next line.
+static void nb_open_text_input(NikitaBuddy* app) {
+    app->prompt[0] = '\0';
+    text_input_reset(app->text_input);
+    text_input_set_header_text(app->text_input, "Ask Nikita");
+    text_input_set_result_callback(
+        app->text_input, nb_text_done_cb, app, app->prompt, sizeof(app->prompt), true);
+    nb_switch(app, NbViewText);
+}
+
+// The "Ask" button on the reply screen -- fires on OK, opens the keyboard for
+// the next message so the chat flows without a trip back to the menu.
+static void nb_ask_again_cb(GuiButtonType result, InputType type, void* context) {
+    UNUSED(result);
+    if(type != InputTypeShort) return;
+    nb_open_text_input((NikitaBuddy*)context);
 }
 
 static void nb_begin_wait(NikitaBuddy* app) {
