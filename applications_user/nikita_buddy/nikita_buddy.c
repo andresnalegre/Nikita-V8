@@ -86,14 +86,14 @@ static void nb_switch(NikitaBuddy* app, NbView view);
 // Prompts you can send without typing. Kept short and genuinely useful on a
 // device with a D-pad for a keyboard.
 static const char* const nb_quick_labels[] = {
-    "Resumir a conversa",
-    "O que voce lembra de mim?",
-    "Status do meu Flipper",
+    "Summarize our chat",
+    "What do you know about me?",
+    "My Flipper status",
 };
 static const char* const nb_quick_prompts[] = {
-    "Resuma em poucas linhas o que conversamos ultimamente.",
-    "O que voce lembra sobre mim? Liste em topicos curtos.",
-    "Me de um resumo do estado do meu Flipper: firmware, espaco no SD e apps instalados.",
+    "Summarize in a few lines what we talked about recently.",
+    "What do you remember about me? List it in short bullet points.",
+    "Give me a short status of my Flipper: firmware, SD space, and installed apps.",
 };
 
 // ---- JSON helpers (tiny, purpose-built) ----------------------------------
@@ -243,7 +243,7 @@ static void nb_show_result(NikitaBuddy* app) {
     if(app->answered) {
         furi_string_cat_str(body, app->reply);
     } else {
-        furi_string_cat_str(body, "Perguntei ao Nikita...\n\n\"");
+        furi_string_cat_str(body, "Asked Nikita...\n\n\"");
         // A short echo of what was asked, so the wait has context.
         char echo[80];
         strlcpy(echo, app->prompt, sizeof(echo));
@@ -254,11 +254,10 @@ static void nb_show_result(NikitaBuddy* app) {
             // The UX the whole design turns on: say what is missing.
             furi_string_cat_str(
                 body,
-                "Ainda sem resposta.\nIsto precisa do iPhone ou do qFlipper\n"
-                "conectado e com o Nikita ligado.\nDeixei a pergunta salva; ele\n"
-                "responde assim que conectar.");
+                "Still no answer.\nThis needs the iPhone app or\nqFlipper connected with Nikita on.\n"
+                "Your question is saved; it will be\nanswered as soon as one connects.");
         } else {
-            furi_string_cat_printf(body, "Aguardando... (%lus)", (unsigned long)app->waited_s);
+            furi_string_cat_printf(body, "Waiting... (%lus)", (unsigned long)app->waited_s);
         }
     }
 
