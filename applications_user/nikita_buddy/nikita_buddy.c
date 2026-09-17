@@ -76,6 +76,7 @@ typedef struct {
     uint32_t next_id; // monotonic id source
     uint32_t waited_s; // seconds spent waiting for the current reply
     bool answered;
+    bool hint_shown;   // the "no answer yet" hint has been drawn once
     NbView current_view; // tracked ourselves; the API has no getter
 } NikitaBuddy;
 
@@ -220,6 +221,7 @@ static void nb_send_prompt(NikitaBuddy* app, const char* text) {
     app->req_id = ++app->next_id;
     app->waited_s = 0;
     app->answered = false;
+    app->hint_shown = false;
     app->reply[0] = '\0';
 
     FuriString* json = furi_string_alloc();
@@ -257,7 +259,7 @@ static void nb_show_result(NikitaBuddy* app) {
                 "Still no answer.\nThis needs the iPhone app or\nqFlipper connected with Nikita on.\n"
                 "Your question is saved; it will be\nanswered as soon as one connects.");
         } else {
-            furi_string_cat_printf(body, "Waiting... (%lus)", (unsigned long)app->waited_s);
+            furi_string_cat_str(body, "Waiting for a reply...");
         }
     }
 
@@ -300,10 +302,18 @@ static bool nb_custom_event_cb(void* context, uint32_t event) {
                 app->answered = true;
                 furi_timer_stop(app->poll_timer);
                 notification_message(app->notifications, &sequence_success);
+                nb_show_result(app); // draw the reply ONCE, then leave it be
+                return true;
             }
         }
     }
-    nb_show_result(app);
+    // Only redraw when crossing into the "no answer yet" hint -- otherwise the
+    // waiting screen is static, so rebuilding it every second (which resets the
+    // text-scroll position) is avoided and the user can actually scroll.
+    if(!app->hint_shown && app->waited_s >= NB_HINT_AFTER_S) {
+        app->hint_shown = true;
+        nb_show_result(app);
+    }
     return true;
 }
 
