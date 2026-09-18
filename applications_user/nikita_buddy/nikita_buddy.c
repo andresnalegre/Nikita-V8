@@ -30,11 +30,15 @@
 #include <gui/modules/widget.h>
 #include <notification/notification_messages.h>
 #include <storage/storage.h>
+#include <string.h>
+#include <stdlib.h>
 
 #define NB_DIR "/ext/nikita"
 #define NB_BUDDY_DIR "/ext/nikita/buddy"
 #define NB_REQ_PATH "/ext/nikita/buddy/req.json"
 #define NB_RES_PATH "/ext/nikita/buddy/res.json"
+// The shared "+" store, written by the phone and qFlipper.
+#define NB_EXTRAS_PATH "/ext/nikita/extras.json"
 
 #define NB_PROMPT_MAX 512
 #define NB_REPLY_MAX 2048
@@ -48,12 +52,17 @@ typedef enum {
     NbViewResult,
 } NbView;
 
+// Quick commands are loaded from the synced /ext/nikita/extras.json (shared by
+// the phone and qFlipper), so a Quick command added on either shows up here.
+// Bounded for a small device; built-ins are used when the file has none.
+#define NB_MAX_QUICK 8
+#define NB_QLABEL_CAP 48
+#define NB_QPROMPT_CAP 256
+
 typedef enum {
-    NbMenuType, // free text
-    NbMenuQuick1,
-    NbMenuQuick2,
-    NbMenuQuick3,
-    NbMenuAbout,
+    NbMenuType = 0, // free text
+    NbMenuQuick1 = 1, // quick command i uses NbMenuQuick1 + i
+    NbMenuAbout = 100,
 } NbMenuItem;
 
 typedef enum {
@@ -78,6 +87,11 @@ typedef struct {
     bool answered;
     bool hint_shown;   // the "no answer yet" hint has been drawn once
     NbView current_view; // tracked ourselves; the API has no getter
+
+    // Quick commands loaded from the synced extras.json (or the built-ins).
+    char quick_labels[NB_MAX_QUICK][NB_QLABEL_CAP];
+    char quick_prompts[NB_MAX_QUICK][NB_QPROMPT_CAP];
+    size_t quick_count;
 } NikitaBuddy;
 
 // Switch view and remember where we are, so Back knows menu-vs-subview.
@@ -87,18 +101,9 @@ static void nb_open_text_input(NikitaBuddy* app);
 static void nb_ask_again_cb(GuiButtonType result, InputType type, void* context);
 
 // ---- Quick commands ------------------------------------------------------
-// Prompts you can send without typing. Kept short and genuinely useful on a
+// Prompts you can send without typing. Loaded from the synced extras.json (see
+// nb_load_quick), with built-in fallbacks. Kept short and genuinely useful on a
 // device with a D-pad for a keyboard.
-static const char* const nb_quick_labels[] = {
-    "Summarize our chat",
-    "What do you know about me?",
-    "My Flipper status",
-};
-static const char* const nb_quick_prompts[] = {
-    "Summarize in a few lines what we talked about recently.",
-    "What do you remember about me? List it in short bullet points.",
-    "Give me a short status of my Flipper: firmware, SD space, and installed apps.",
-};
 
 // ---- JSON helpers (tiny, purpose-built) ----------------------------------
 
@@ -215,6 +220,91 @@ static int nb_read_file(NikitaBuddy* app, const char* path, char* buf, size_t ca
     storage_file_close(f);
     storage_file_free(f);
     return n;
+}
+
+// Read the string value that follows the Nth occurrence of "key" (i.e.
+// "key"...:"value") starting at *cursor; copies the unescaped value into out and
+// advances *cursor past it. Returns false when there is no further occurrence.
+// A tiny, forgiving scanner -- enough for the flat quickCommands objects, not a
+// general JSON parser.
+static bool nb_json_next_string(const char** cursor, const char* key, char* out, size_t cap) {
+    const char* p = *cursor;
+    size_t klen = strlen(key);
+    // Find `"key"`.
+    while((p = strchr(p, '"')) != NULL) {
+        if(strncmp(p + 1, key, klen) == 0 && p[1 + klen] == '"') {
+            p += 1 + klen + 1;
+            break;
+        }
+        p++;
+    }
+    if(!p) return false;
+    // Skip to the colon and the opening quote of the value.
+    p = strchr(p, ':');
+    if(!p) return false;
+    p++;
+    while(*p == ' ' || *p == '\t') p++;
+    if(*p != '"') return false;
+    p++;
+    // Copy the value, unescaping the handful of sequences we emit.
+    size_t o = 0;
+    while(*p && *p != '"') {
+        char c = *p++;
+        if(c == '\\' && *p) {
+            char e = *p++;
+            c = (e == 'n') ? '\n' : (e == 't' ? '\t' : e);
+        }
+        if(o + 1 < cap) out[o++] = c;
+    }
+    out[o] = '\0';
+    if(*p == '"') p++;
+    *cursor = p;
+    return true;
+}
+
+// Fill the built-in quick commands (used when extras.json has none).
+static void nb_load_quick_builtins(NikitaBuddy* app) {
+    static const char* const labels[] = {
+        "Summarize our chat",
+        "What do you know about me?",
+        "My Flipper status",
+    };
+    static const char* const prompts[] = {
+        "Summarize in a few lines what we talked about recently.",
+        "What do you remember about me? List it in short bullet points.",
+        "Give me a short status of my Flipper: firmware, SD space, and installed apps.",
+    };
+    app->quick_count = 3;
+    for(size_t i = 0; i < 3; i++) {
+        strlcpy(app->quick_labels[i], labels[i], NB_QLABEL_CAP);
+        strlcpy(app->quick_prompts[i], prompts[i], NB_QPROMPT_CAP);
+    }
+}
+
+// Load quick commands from the shared extras.json so the firmware reflects what
+// was added on the phone or qFlipper. Pairs each "label" with the following
+// "prompt" (both clients emit label before prompt). Falls back to the built-ins.
+static void nb_load_quick(NikitaBuddy* app) {
+    app->quick_count = 0;
+    char* buf = malloc(8192);
+    if(buf) {
+        int n = nb_read_file(app, NB_EXTRAS_PATH, buf, 8192);
+        if(n > 0) {
+            const char* cur = buf;
+            char label[NB_QLABEL_CAP];
+            char prompt[NB_QPROMPT_CAP];
+            while(app->quick_count < NB_MAX_QUICK &&
+                  nb_json_next_string(&cur, "label", label, sizeof(label)) &&
+                  nb_json_next_string(&cur, "prompt", prompt, sizeof(prompt))) {
+                if(label[0] == '\0' || prompt[0] == '\0') continue;
+                strlcpy(app->quick_labels[app->quick_count], label, NB_QLABEL_CAP);
+                strlcpy(app->quick_prompts[app->quick_count], prompt, NB_QPROMPT_CAP);
+                app->quick_count++;
+            }
+        }
+        free(buf);
+    }
+    if(app->quick_count == 0) nb_load_quick_builtins(app);
 }
 
 // Drop the request in the mailbox and clear any stale reply so a leftover
@@ -360,6 +450,13 @@ static void nb_text_done_cb(void* context) {
 
 static void nb_menu_cb(void* context, uint32_t index) {
     NikitaBuddy* app = context;
+    // A quick command: indices NbMenuQuick1 .. NbMenuQuick1 + quick_count - 1.
+    if(index >= NbMenuQuick1 && index < NbMenuQuick1 + app->quick_count) {
+        size_t q = index - NbMenuQuick1;
+        nb_send_prompt(app, app->quick_prompts[q]);
+        nb_begin_wait(app);
+        return;
+    }
     switch(index) {
     case NbMenuType:
         app->prompt[0] = '\0';
@@ -369,14 +466,6 @@ static void nb_menu_cb(void* context, uint32_t index) {
             app->text_input, nb_text_done_cb, app, app->prompt, sizeof(app->prompt), true);
         nb_switch(app, NbViewText);
         break;
-    case NbMenuQuick1:
-    case NbMenuQuick2:
-    case NbMenuQuick3: {
-        size_t q = index - NbMenuQuick1;
-        nb_send_prompt(app, nb_quick_prompts[q]);
-        nb_begin_wait(app);
-        break;
-    }
     case NbMenuAbout:
         widget_reset(app->widget);
         app->answered = true; // static screen, no polling
@@ -415,9 +504,10 @@ static void nb_build_menu(NikitaBuddy* app) {
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, "Nikita Buddy");
     submenu_add_item(app->submenu, "Type a message", NbMenuType, nb_menu_cb, app);
-    submenu_add_item(app->submenu, nb_quick_labels[0], NbMenuQuick1, nb_menu_cb, app);
-    submenu_add_item(app->submenu, nb_quick_labels[1], NbMenuQuick2, nb_menu_cb, app);
-    submenu_add_item(app->submenu, nb_quick_labels[2], NbMenuQuick3, nb_menu_cb, app);
+    for(size_t i = 0; i < app->quick_count; i++) {
+        submenu_add_item(
+            app->submenu, app->quick_labels[i], NbMenuQuick1 + i, nb_menu_cb, app);
+    }
     submenu_add_item(app->submenu, "About", NbMenuAbout, nb_menu_cb, app);
 }
 
@@ -438,6 +528,7 @@ static NikitaBuddy* nikita_buddy_alloc(void) {
     view_dispatcher_set_navigation_event_callback(app->view_dispatcher, nb_back_event_cb);
 
     app->submenu = submenu_alloc();
+    nb_load_quick(app);   // pull quick commands synced from phone/qFlipper
     nb_build_menu(app);
     view_dispatcher_add_view(app->view_dispatcher, NbViewMenu, submenu_get_view(app->submenu));
 
