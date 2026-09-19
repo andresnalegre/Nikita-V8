@@ -6,6 +6,19 @@
       "description": "Stable Nikita firmware. Recommended.",
       "versions": [
         {
+          "version": "nkt-016",
+          "changelog": "Nikita firmware nkt-016. Nikita Buddy gains a firmware-native 'Scan what I'm connected to' -- one tap sends Nikita's security brain across your Flipper radios, computer network and BLE; she finds and reports, you decide (she never fixes on her own). Refreshed About; still one Nikita across iPhone, qFlipper and firmware via the SD sync.",
+          "timestamp": 1790457646,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-016/flipper-z-f7-update-nkt-016.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "e779e978a29b28ed3d1b4ce47cfbffdb87eace8ef2713be2eb4f920a8be1c8b3"
+            }
+          ]
+        },
+        {
           "version": "nkt-015",
           "changelog": "Nikita firmware nkt-015. Nikita Buddy loads quick commands from the synced /ext/nikita/extras.json (cross-client sync across iPhone, qFlipper and firmware).",
           "timestamp": 1789764751,
