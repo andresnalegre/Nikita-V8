@@ -5,7 +5,7 @@ App(
     entry_point="nikita_buddy_app",
     requires=["gui", "notification", "storage"],
     stack_size=4 * 1024,
-    fap_version="0.1",
+    fap_version="0.2",
     fap_icon="icons/nikita_10px.png",
     fap_category="Bluetooth",
     fap_description="Talk to Nikita from the Flipper. Types a prompt into the SD-card mailbox; the phone or qFlipper answers over its Kimi link.",

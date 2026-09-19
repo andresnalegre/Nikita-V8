@@ -62,8 +62,23 @@ typedef enum {
 typedef enum {
     NbMenuType = 0, // free text
     NbMenuQuick1 = 1, // quick command i uses NbMenuQuick1 + i
+    NbMenuPentest = 90, // fixed: kick off an authorized security sweep
     NbMenuAbout = 100,
 } NbMenuItem;
+
+// The on-device trigger for Nikita's security brain. The Flipper can't run the
+// sweep itself, but one tap here drops the intent in the mailbox and whichever
+// companion is connected (iPhone/qFlipper) runs the real recon across every
+// surface -- the Flipper's own radios, the bridged computer's network, BLE --
+// and reports back. Find-and-report only: Nikita does not fix anything on her
+// own; the user decides. Scope stays the user's own/authorized systems.
+#define NB_PENTEST_PROMPT                                                       \
+    "Run an authorized security sweep of everything you are connected to right " \
+    "now -- my Flipper's radios (sub-GHz, NFC/RFID, IR, BadUSB), this "          \
+    "computer's network, and any BLE in range. Find the weaknesses I can't "     \
+    "see, verify them safely, and report each one with where it is, its "        \
+    "severity, the evidence, and what an attacker could do. Do not fix "         \
+    "anything -- just show me the truth and I'll decide."
 
 typedef enum {
     NbCustomPoll = 1,
@@ -466,6 +481,10 @@ static void nb_menu_cb(void* context, uint32_t index) {
             app->text_input, nb_text_done_cb, app, app->prompt, sizeof(app->prompt), true);
         nb_switch(app, NbViewText);
         break;
+    case NbMenuPentest:
+        nb_send_prompt(app, NB_PENTEST_PROMPT);
+        nb_begin_wait(app);
+        break;
     case NbMenuAbout:
         widget_reset(app->widget);
         app->answered = true; // static screen, no polling
@@ -475,10 +494,12 @@ static void nb_menu_cb(void* context, uint32_t index) {
             0,
             128,
             64,
-            "Nikita Buddy v0.1\n\n"
-            "Ask Nikita from the Flipper.\nYour question goes to the SD\n"
-            "card mailbox; the iPhone or\nqFlipper answers over its\n"
-            "Kimi link. No internet on the\nFlipper itself.\n\n"
+            "Nikita Buddy v0.2\n\n"
+            "One Nikita, reached from the\nFlipper. Your question goes to\n"
+            "the SD mailbox; the iPhone or\nqFlipper answers over its Kimi\n"
+            "link -- same memory, same\nskills. No internet here.\n\n"
+            "\"Scan what I'm connected to\"\nsends her security brain across\n"
+            "your radios, network and BLE:\nshe finds and reports, you\ndecide.\n\n"
             "/ext/nikita/buddy/");
         nb_switch(app, NbViewResult);
         break;
@@ -508,6 +529,10 @@ static void nb_build_menu(NikitaBuddy* app) {
         submenu_add_item(
             app->submenu, app->quick_labels[i], NbMenuQuick1 + i, nb_menu_cb, app);
     }
+    // Always-present, firmware-native: the security sweep. Not from extras.json,
+    // so it is there on the Flipper's own screen no matter what is synced.
+    submenu_add_item(
+        app->submenu, "Scan what I'm connected to", NbMenuPentest, nb_menu_cb, app);
     submenu_add_item(app->submenu, "About", NbMenuAbout, nb_menu_cb, app);
 }
 
