@@ -7,14 +7,14 @@
       "versions": [
         {
           "version": "nkt-016",
-          "changelog": "Nikita firmware nkt-016. Nikita Buddy gains a firmware-native 'Scan what I'm connected to' -- one tap sends Nikita's security brain across your Flipper radios, computer network and BLE; she finds and reports, you decide (she never fixes on her own). Refreshed About; still one Nikita across iPhone, qFlipper and firmware via the SD sync.",
-          "timestamp": 1790457646,
+          "changelog": "Nikita firmware nkt-016.",
+          "timestamp": 1789849291,
           "files": [
             {
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-016/flipper-z-f7-update-nkt-016.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "e779e978a29b28ed3d1b4ce47cfbffdb87eace8ef2713be2eb4f920a8be1c8b3"
+              "sha256": "7024236f5fa1087e6e36438a6f044cafd66f70a4582b218422550c15cdfe9117"
             }
           ]
         },
@@ -132,19 +132,6 @@
               "target": "f7",
               "type": "update_tgz",
               "sha256": "5da2d1640c451ec02415a5ea5518cd70960da9f0e5b3035dc532242c2bc43117"
-            }
-          ]
-        },
-        {
-          "version": "nkt-006",
-          "changelog": "Nikita firmware nkt-006.",
-          "timestamp": 1788818903,
-          "files": [
-            {
-              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-006/flipper-z-f7-update-nkt-006.tgz",
-              "target": "f7",
-              "type": "update_tgz",
-              "sha256": "0365b127364be9ad52be155dbb7a9d3d518ecb4a7100848933fa97b0018d5f05"
             }
           ]
         }
