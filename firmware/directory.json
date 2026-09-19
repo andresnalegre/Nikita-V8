@@ -7,14 +7,14 @@
       "versions": [
         {
           "version": "nkt-015",
-          "changelog": "Nikita firmware nkt-015.",
+          "changelog": "Nikita firmware nkt-015. Nikita Buddy loads quick commands from the synced /ext/nikita/extras.json (cross-client sync across iPhone, qFlipper and firmware).",
           "timestamp": 1789764751,
           "files": [
             {
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-015/flipper-z-f7-update-nkt-015.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "5f46568014ec0397c93d5e04a8ff6acf10edcff17eaa03c826344bd9eae95655"
+              "sha256": "27e12182dee6fd1eac2ae2387b334e0c7a2a619a7cd8474f561ab07daa0d915c"
             }
           ]
         },
