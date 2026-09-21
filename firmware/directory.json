@@ -7,14 +7,14 @@
       "versions": [
         {
           "version": "nkt-019",
-          "changelog": "Nikita firmware nkt-019. Really fixes the UsageFault crash when Nikita answered on the Flipper -- the reply text box now renders with minimal stack and no width-measuring. She answers, types the reply, and stays alive.",
-          "timestamp": 1790625600,
+          "changelog": "Nikita firmware nkt-019.",
+          "timestamp": 1789987911,
           "files": [
             {
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-019/flipper-z-f7-update-nkt-019.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "84fbd03fa4ffb512e5b4995f37601056cc002392a3ca4dd76f96aac571d2f9e2"
+              "sha256": "2dab556e41afb78b466e79cb37bafa71e4aebfd8ba9c42ad8df948ee95f13c79"
             }
           ]
         },
@@ -132,19 +132,6 @@
               "target": "f7",
               "type": "update_tgz",
               "sha256": "7f65ac5028854324f37464ef9aebd011185c21f6c5d131cd70b253a538196bd0"
-            }
-          ]
-        },
-        {
-          "version": "nkt-009",
-          "changelog": "Nikita firmware nkt-009.",
-          "timestamp": 1789221287,
-          "files": [
-            {
-              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-009/flipper-z-f7-update-nkt-009.tgz",
-              "target": "f7",
-              "type": "update_tgz",
-              "sha256": "4d6317edade94c96f60c21fdae88eda9449dddf44d4c3202bf3cd17fe22057ed"
             }
           ]
         }
