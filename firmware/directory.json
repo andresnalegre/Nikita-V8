@@ -7,14 +7,14 @@
       "versions": [
         {
           "version": "nkt-017",
-          "changelog": "Nikita firmware nkt-017. Nikita Buddy shows HER animated face (malicious jack-o'-lantern, full-screen, blinking and working her jaw while she talks; reply types Undertale-style). Hold RIGHT on the desktop opens the Buddy.",
-          "timestamp": 1790610000,
+          "changelog": "Nikita firmware nkt-017.",
+          "timestamp": 1789986167,
           "files": [
             {
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-017/flipper-z-f7-update-nkt-017.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "68fab82285be5308c06c1217b713721e8011130d95375d53a2d270a06b55730c"
+              "sha256": "44fc83f3f530e91c7bde0367ccfc5ca096968d363c7d74ddf121f44504d4083f"
             }
           ]
         },
@@ -132,19 +132,6 @@
               "target": "f7",
               "type": "update_tgz",
               "sha256": "0bac5bdc635426e582f7fb3b80a94d7392764e7a2bda6f93095dc9cb6132992d"
-            }
-          ]
-        },
-        {
-          "version": "nkt-007",
-          "changelog": "Nikita firmware nkt-007.",
-          "timestamp": 1789213873,
-          "files": [
-            {
-              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-007/flipper-z-f7-update-nkt-007.tgz",
-              "target": "f7",
-              "type": "update_tgz",
-              "sha256": "5da2d1640c451ec02415a5ea5518cd70960da9f0e5b3035dc532242c2bc43117"
             }
           ]
         }
