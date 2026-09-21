@@ -7,14 +7,14 @@
       "versions": [
         {
           "version": "nkt-022",
-          "changelog": "Nikita firmware nkt-022. Buddy: no box on the opening face (just Nikita); her reply appears in a box that types out, Enter dismisses it, Up/Down scroll long answers. Includes the WIFI app (ESP32 Marauder over GPIO).",
-          "timestamp": 1790634600,
+          "changelog": "Nikita firmware nkt-022.",
+          "timestamp": 1790003062,
           "files": [
             {
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-022/flipper-z-f7-update-nkt-022.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "6d5348e3ff8d2ae1444f21d4f38af255640fc8f315c8be1c7b6f297f117f8d1f"
+              "sha256": "b72c4915e7e42a1cb13208e4f8415850372965ba1ed441346b01d73838d3fee2"
             }
           ]
         },
@@ -132,19 +132,6 @@
               "target": "f7",
               "type": "update_tgz",
               "sha256": "1e7c588ae73818511843bc23879269ce32ea7ecfaa3521ff73aef3e521da4f11"
-            }
-          ]
-        },
-        {
-          "version": "nkt-011",
-          "changelog": "Nikita firmware nkt-011.",
-          "timestamp": 1789654380,
-          "files": [
-            {
-              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-011/flipper-z-f7-update-nkt-011.tgz",
-              "target": "f7",
-              "type": "update_tgz",
-              "sha256": "9b4cc0eb2634cd76744194677a3d52e107c4725fc1dd2a835d71c7213393f2e9"
             }
           ]
         }
