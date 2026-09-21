@@ -35,15 +35,18 @@ static const unsigned char* pick_frame(bool eyes_shut, bool mouth_open) {
 // The Undertale-style box, laid OVER the bottom of the face so the eyes and the
 // working jaw stay visible above it. Two lines, typed out.
 static void draw_textbox(Canvas* canvas, const FaceModel* m) {
-    const int by = 46, bh = 17; // bottom strip
-    // Clear the strip so text is legible over the face, then frame it.
-    canvas_set_color(canvas, ColorBlack);
-    canvas_draw_box(canvas, 0, by, 128, bh);
+    // The box lives in the empty space BELOW the face, never over it -- the
+    // whole face stays visible and uncut. Frame only (no black fill needed,
+    // since there's nothing to cover there).
+    const int by = NIKITA_FACE_BOTTOM + 2;
+    const int bh = 64 - by;
     canvas_set_color(canvas, ColorWhite);
     canvas_draw_rframe(canvas, 0, by, 128, bh, 2);
     canvas_set_font(canvas, FontSecondary);
 
-    const int max_w = 118;
+    // Generous inner padding so text never touches the border.
+    const int pad_x = 6;
+    const int max_w = 128 - pad_x * 2 - 4;
     char shown[FACE_TEXT_MAX];
     size_t n = m->shown;
     if(n >= sizeof(shown)) n = sizeof(shown) - 1;
@@ -96,7 +99,7 @@ static void draw_textbox(Canvas* canvas, const FaceModel* m) {
         }
     }
     for(int i = 0; i < line_count; i++) {
-        canvas_draw_str(canvas, 4, by + 8 + i * 8, lines[i]);
+        canvas_draw_str(canvas, pad_x, by + 9 + i * 8, lines[i]);
     }
 }
 
