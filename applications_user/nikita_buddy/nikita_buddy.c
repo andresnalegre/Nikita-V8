@@ -24,6 +24,7 @@
 #include <furi.h>
 #include <furi_hal.h>
 #include <gui/gui.h>
+#include <gui/view.h>
 #include <gui/view_dispatcher.h>
 #include <gui/modules/submenu.h>
 #include <gui/modules/text_input.h>
@@ -32,6 +33,8 @@
 #include <storage/storage.h>
 #include <string.h>
 #include <stdlib.h>
+
+#include "nikita_face.h"
 
 #define NB_DIR "/ext/nikita"
 #define NB_BUDDY_DIR "/ext/nikita/buddy"
@@ -50,6 +53,7 @@ typedef enum {
     NbViewMenu,
     NbViewText,
     NbViewResult,
+    NbViewFace,   // Nikita's animated face + Undertale text box (the reply screen)
 } NbView;
 
 // Quick commands are loaded from the synced /ext/nikita/extras.json (shared by
@@ -82,6 +86,7 @@ typedef enum {
 
 typedef enum {
     NbCustomPoll = 1,
+    NbCustomAnim = 2, // advance the face animation on the GUI thread
 } NbCustomEvent;
 
 typedef struct {
@@ -92,7 +97,9 @@ typedef struct {
     Submenu* submenu;
     TextInput* text_input;
     Widget* widget;
+    View* face;             // Nikita's animated face (reply screen)
     FuriTimer* poll_timer;
+    FuriTimer* anim_timer;  // drives the face while it's on screen
 
     char prompt[NB_PROMPT_MAX];
     char reply[NB_REPLY_MAX];
@@ -113,7 +120,7 @@ typedef struct {
 static void nb_switch(NikitaBuddy* app, NbView view);
 static void nb_text_done_cb(void* context);
 static void nb_open_text_input(NikitaBuddy* app);
-static void nb_ask_again_cb(GuiButtonType result, InputType type, void* context);
+static void nb_face_ok_cb(void* context);
 
 // ---- Quick commands ------------------------------------------------------
 // Prompts you can send without typing. Loaded from the synced extras.json (see
@@ -344,47 +351,6 @@ static void nb_send_prompt(NikitaBuddy* app, const char* text) {
     nb_write_file(app, NB_RES_PATH, "{\"id\":0}", 8);
 }
 
-// ---- Result view rendering ----------------------------------------------
-
-static void nb_show_result(NikitaBuddy* app) {
-    widget_reset(app->widget);
-    FuriString* body = furi_string_alloc();
-
-    if(app->answered) {
-        // A little chat context: what you asked, then Nikita's reply.
-        furi_string_cat_str(body, "> ");
-        furi_string_cat_str(body, app->prompt);
-        furi_string_cat_str(body, "\n\n");
-        furi_string_cat_str(body, app->reply);
-    } else {
-        furi_string_cat_str(body, "Asked Nikita...\n\n\"");
-        // A short echo of what was asked, so the wait has context.
-        char echo[80];
-        strlcpy(echo, app->prompt, sizeof(echo));
-        furi_string_cat_str(body, echo);
-        if(strlen(app->prompt) >= sizeof(echo) - 1) furi_string_cat_str(body, "...");
-        furi_string_cat_str(body, "\"\n\n");
-        if(app->waited_s >= NB_HINT_AFTER_S) {
-            // The UX the whole design turns on: say what is missing.
-            furi_string_cat_str(
-                body,
-                "Still no answer.\nThis needs the iPhone app or\nqFlipper connected with Nikita on.\n"
-                "Your question is saved; it will be\nanswered as soon as one connects.");
-        } else {
-            furi_string_cat_str(body, "Waiting for a reply...");
-        }
-    }
-
-    // Leave room at the bottom for the Ask button once there is a reply.
-    widget_add_text_scroll_element(
-        app->widget, 0, 0, 128, app->answered ? 52 : 64, furi_string_get_cstr(body));
-    if(app->answered) {
-        widget_add_button_element(
-            app->widget, GuiButtonTypeCenter, "Ask", nb_ask_again_cb, app);
-    }
-    furi_string_free(body);
-}
-
 static void nb_switch(NikitaBuddy* app, NbView view) {
     app->current_view = view;
     view_dispatcher_switch_to_view(app->view_dispatcher, view);
@@ -401,18 +367,27 @@ static void nb_open_text_input(NikitaBuddy* app) {
     nb_switch(app, NbViewText);
 }
 
-// The "Ask" button on the reply screen -- fires on OK, opens the keyboard for
-// the next message so the chat flows without a trip back to the menu.
-static void nb_ask_again_cb(GuiButtonType result, InputType type, void* context) {
-    UNUSED(result);
-    if(type != InputTypeShort) return;
+// OK on the face screen -- opens the keyboard for the next line, so the chat
+// flows without a trip back to the menu.
+static void nb_face_ok_cb(void* context) {
     nb_open_text_input((NikitaBuddy*)context);
 }
 
+// Drives the face animation: fires on a ~10fps timer and hands the tick to the
+// GUI thread, where the model can be safely updated and redrawn.
+static void nb_anim_timer_cb(void* context) {
+    NikitaBuddy* app = context;
+    view_dispatcher_send_custom_event(app->view_dispatcher, NbCustomAnim);
+}
+
 static void nb_begin_wait(NikitaBuddy* app) {
-    nb_show_result(app);
-    nb_switch(app, NbViewResult);
+    // Nikita comes on screen thinking, and starts moving; the reply, when it
+    // lands, makes her talk and types itself into the box below her.
+    nikita_face_set_text(app->face, "");
+    nikita_face_set_mood(app->face, NikitaFaceThinking);
+    nb_switch(app, NbViewFace);
     furi_timer_start(app->poll_timer, furi_ms_to_ticks(NB_POLL_MS));
+    furi_timer_start(app->anim_timer, furi_ms_to_ticks(100)); // ~10 fps
 }
 
 // ---- Callbacks -----------------------------------------------------------
@@ -425,6 +400,11 @@ static void nb_poll_timer_cb(void* context) {
 
 static bool nb_custom_event_cb(void* context, uint32_t event) {
     NikitaBuddy* app = context;
+    // Animation tick: advance the face (blink, mouth, typewriter).
+    if(event == NbCustomAnim) {
+        nikita_face_tick(app->face);
+        return true;
+    }
     if(event != NbCustomPoll) return false;
     if(app->answered) return true;
 
@@ -438,17 +418,22 @@ static bool nb_custom_event_cb(void* context, uint32_t event) {
                 app->answered = true;
                 furi_timer_stop(app->poll_timer);
                 notification_message(app->notifications, &sequence_success);
-                nb_show_result(app); // draw the reply ONCE, then leave it be
+                // She speaks: the reply types itself out while her mouth works.
+                nikita_face_set_text(app->face, app->reply);
+                nikita_face_set_mood(app->face, NikitaFaceTalking);
                 return true;
             }
         }
     }
-    // Only redraw when crossing into the "no answer yet" hint -- otherwise the
-    // waiting screen is static, so rebuilding it every second (which resets the
-    // text-scroll position) is avoided and the user can actually scroll.
+    // No answer yet: after a while, she says plainly what's missing (still in
+    // her own voice, typed into the box).
     if(!app->hint_shown && app->waited_s >= NB_HINT_AFTER_S) {
         app->hint_shown = true;
-        nb_show_result(app);
+        nikita_face_set_text(
+            app->face,
+            "No answer yet. Connect the iPhone or qFlipper with Nikita on -- "
+            "your question is saved and I'll answer the moment one is there.");
+        nikita_face_set_mood(app->face, NikitaFaceTalking);
     }
     return true;
 }
@@ -515,6 +500,7 @@ static bool nb_back_event_cb(void* context) {
         return false; // exit
     }
     furi_timer_stop(app->poll_timer);
+    furi_timer_stop(app->anim_timer);
     nb_switch(app, NbViewMenu);
     return true;
 }
@@ -564,7 +550,14 @@ static NikitaBuddy* nikita_buddy_alloc(void) {
     app->widget = widget_alloc();
     view_dispatcher_add_view(app->view_dispatcher, NbViewResult, widget_get_view(app->widget));
 
+    // Nikita's face -- the reply screen. She owns OK (ask again); Back is the
+    // dispatcher's navigation callback.
+    app->face = nikita_face_alloc();
+    nikita_face_set_ok_callback(app->face, nb_face_ok_cb, app);
+    view_dispatcher_add_view(app->view_dispatcher, NbViewFace, app->face);
+
     app->poll_timer = furi_timer_alloc(nb_poll_timer_cb, FuriTimerTypePeriodic, app);
+    app->anim_timer = furi_timer_alloc(nb_anim_timer_cb, FuriTimerTypePeriodic, app);
 
     view_dispatcher_attach_to_gui(
         app->view_dispatcher, app->gui, ViewDispatcherTypeFullscreen);
@@ -574,13 +567,17 @@ static NikitaBuddy* nikita_buddy_alloc(void) {
 static void nikita_buddy_free(NikitaBuddy* app) {
     furi_timer_stop(app->poll_timer);
     furi_timer_free(app->poll_timer);
+    furi_timer_stop(app->anim_timer);
+    furi_timer_free(app->anim_timer);
 
     view_dispatcher_remove_view(app->view_dispatcher, NbViewMenu);
     view_dispatcher_remove_view(app->view_dispatcher, NbViewText);
     view_dispatcher_remove_view(app->view_dispatcher, NbViewResult);
+    view_dispatcher_remove_view(app->view_dispatcher, NbViewFace);
     submenu_free(app->submenu);
     text_input_free(app->text_input);
     widget_free(app->widget);
+    nikita_face_free(app->face);
     view_dispatcher_free(app->view_dispatcher);
 
     furi_record_close(RECORD_NOTIFICATION);
