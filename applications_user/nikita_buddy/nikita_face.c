@@ -48,10 +48,25 @@ static void draw_textbox(Canvas* canvas, const FaceModel* m) {
     // Generous inner padding so text never touches the border.
     const int pad_x = 6;
     const int max_w = 128 - pad_x * 2 - 4;
-    char shown[FACE_TEXT_MAX];
-    size_t n = m->shown;
+
+    // Nothing said yet (she's thinking): show a pulsing "..." so you see her
+    // working from the moment the box appears.
+    if(m->len == 0) {
+        int dots = (m->frame / 4) % 4;
+        char d[5] = {0};
+        for(int i = 0; i < dots; i++) d[i] = '.';
+        canvas_draw_str(canvas, pad_x, by + 13, d);
+        return;
+    }
+    // Only the TAIL of the revealed text is ever visible (2 lines), so copy just
+    // that onto the stack -- NOT the whole 2KB buffer. This draw callback runs on
+    // the GUI thread's small stack; a 2KB local array here overflows it and the
+    // system takes a UsageFault. Keep this tiny.
+    char shown[224];
+    size_t start = (m->shown > sizeof(shown) - 1) ? m->shown - (sizeof(shown) - 1) : 0;
+    size_t n = m->shown - start;
     if(n >= sizeof(shown)) n = sizeof(shown) - 1;
-    memcpy(shown, m->text, n);
+    memcpy(shown, m->text + start, n);
     shown[n] = '\0';
 
     // Wrap into lines, keep the last 2 (rolling window) so the newest text shows.
@@ -120,8 +135,9 @@ static void face_draw_callback(Canvas* canvas, void* model) {
 
     canvas_draw_xbm(canvas, 0, 0, NIKITA_FACE_W, NIKITA_FACE_H, pick_frame(blink, mouth_open));
 
-    // Her words, over the bottom, only once there's something to say.
-    if(m->len > 0) draw_textbox(canvas, m);
+    // The box: her words while talking, or a pulsing "..." while she thinks --
+    // so there's feedback on screen from the moment you ask.
+    if(m->len > 0 || m->mood == NikitaFaceThinking) draw_textbox(canvas, m);
 }
 
 static bool face_input_callback(InputEvent* event, void* context) {
