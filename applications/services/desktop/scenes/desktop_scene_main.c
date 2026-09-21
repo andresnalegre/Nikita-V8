@@ -174,8 +174,10 @@ bool desktop_scene_main_on_event(void* context, SceneManagerEvent event) {
             consumed = true;
             break;
         case DesktopMainEventOpenFavoriteRightLong:
-            desktop_scene_main_start_favorite(
-                desktop, &desktop->settings.favorite_apps[FavoriteAppRightLong]);
+            // Hold RIGHT summons Nikita: her Buddy is always one gesture away
+            // from the desktop, whatever else is configured.
+            loader_start_detached_with_gui_error(
+                desktop->loader, "/ext/apps/Bluetooth/nikita_buddy.fap", NULL);
             consumed = true;
             break;
         case DesktopMainEventOpenFavoriteOkLong:
