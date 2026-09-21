@@ -6,6 +6,19 @@
       "description": "Stable Nikita firmware. Recommended.",
       "versions": [
         {
+          "version": "nkt-024",
+          "changelog": "Nikita firmware nkt-024. WIFI is now a top-level MAIN MENU app with its own wifi icon (no longer buried in GPIO), turbocharged to the full ESP32 Marauder command set: channel picker (1-14), scan/list AP+station, sniff beacon/probe/deauth/PMKID/pwnagotchi/raw/ESP, deauth (all+targeted), beacon spam (list/random/AP-clone), probe flood, rickroll, wardrive, clear lists, reboot, stop. Authorised testing only.",
+          "timestamp": 1790017972,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-024/flipper-z-f7-update-nkt-024.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "6663956c0296c987dcaf6cee7d1a9d841c2f1ac9d1f9632a49606a495a55356d"
+            }
+          ]
+        },
+        {
           "version": "nkt-023",
           "changelog": "Nikita firmware nkt-023.",
           "timestamp": 1790003908,
@@ -141,13 +154,41 @@
       "id": "release-candidate",
       "title": "Release Candidate",
       "description": "Nikita firmware under test before it becomes a release.",
-      "versions": []
+      "versions": [
+        {
+          "version": "nkt-024",
+          "changelog": "Nikita firmware nkt-024. WIFI is now a top-level MAIN MENU app with its own wifi icon (no longer buried in GPIO), turbocharged to the full ESP32 Marauder command set: channel picker (1-14), scan/list AP+station, sniff beacon/probe/deauth/PMKID/pwnagotchi/raw/ESP, deauth (all+targeted), beacon spam (list/random/AP-clone), probe flood, rickroll, wardrive, clear lists, reboot, stop. Authorised testing only.",
+          "timestamp": 1790017972,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-024/flipper-z-f7-update-nkt-024.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "6663956c0296c987dcaf6cee7d1a9d841c2f1ac9d1f9632a49606a495a55356d"
+            }
+          ]
+        }
+      ]
     },
     {
       "id": "development",
       "title": "Development",
       "description": "Nikita firmware built from the tip. Expect bugs.",
-      "versions": []
+      "versions": [
+        {
+          "version": "nkt-024",
+          "changelog": "Nikita firmware nkt-024. WIFI is now a top-level MAIN MENU app with its own wifi icon (no longer buried in GPIO), turbocharged to the full ESP32 Marauder command set: channel picker (1-14), scan/list AP+station, sniff beacon/probe/deauth/PMKID/pwnagotchi/raw/ESP, deauth (all+targeted), beacon spam (list/random/AP-clone), probe flood, rickroll, wardrive, clear lists, reboot, stop. Authorised testing only.",
+          "timestamp": 1790017972,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-024/flipper-z-f7-update-nkt-024.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "6663956c0296c987dcaf6cee7d1a9d841c2f1ac9d1f9632a49606a495a55356d"
+            }
+          ]
+        }
+      ]
     }
   ]
 }
