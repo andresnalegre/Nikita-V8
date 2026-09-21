@@ -73,10 +73,12 @@ static void face_wrap(FaceModel* m, const char* text) {
         for(int k = 0; k < wl && col < FACE_COLS; k++) m->lines[m->line_count][col++] = ws[k];
         m->lines[m->line_count][col] = '\0';
     }
-    if(m->line_count < FACE_MAX_LINES && (col > 0 || m->line_count == 0)) {
+    if(m->line_count < FACE_MAX_LINES && col > 0) {
         m->lines[m->line_count][col] = '\0';
         m->line_count++;
     }
+    // Empty / whitespace-only text => NO lines, so no box is ever drawn.
+    if(m->line_count == 1 && m->lines[0][0] == '\0') m->line_count = 0;
     for(int i = 0; i < m->line_count; i++) m->total_chars += (int)strlen(m->lines[i]);
     m->shown = 0;
     m->scroll = 0;
@@ -99,15 +101,6 @@ static void draw_textbox(Canvas* canvas, const FaceModel* m) {
     canvas_set_color(canvas, ColorWhite);
     canvas_draw_rframe(canvas, 0, by, 128, bh, 2);
     canvas_set_font(canvas, FontSecondary);
-
-    // Thinking, nothing said yet: a pulsing "..."
-    if(m->line_count == 0) {
-        int dots = (m->frame / 4) % 4;
-        char d[5] = {0};
-        for(int i = 0; i < dots; i++) d[i] = '.';
-        canvas_draw_str(canvas, pad_x, by + 13, d);
-        return;
-    }
 
     // chars revealed before the first visible line
     int before = 0;
@@ -146,9 +139,9 @@ static void face_draw_callback(Canvas* canvas, void* model) {
 
     canvas_draw_xbm(canvas, 0, 0, NIKITA_FACE_W, NIKITA_FACE_H, pick_frame(blink, mouth_open));
 
-    // Box only when there's something to say AND it hasn't been dismissed.
-    bool show_box = (!m->dismissed) && (m->line_count > 0 || m->mood == NikitaFaceThinking);
-    if(show_box) draw_textbox(canvas, m);
+    // Box ONLY when there's actual text and it hasn't been dismissed --
+    // never an empty box, never "...".
+    if(!m->dismissed && m->line_count > 0) draw_textbox(canvas, m);
 }
 
 // ---- input ----------------------------------------------------------------
