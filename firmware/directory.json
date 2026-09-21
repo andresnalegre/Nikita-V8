@@ -6,6 +6,19 @@
       "description": "Stable Nikita firmware. Recommended.",
       "versions": [
         {
+          "version": "nkt-017",
+          "changelog": "Nikita firmware nkt-017. Nikita Buddy shows HER animated face (malicious jack-o'-lantern, full-screen, blinking and working her jaw while she talks; reply types Undertale-style). Hold RIGHT on the desktop opens the Buddy.",
+          "timestamp": 1790610000,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-017/flipper-z-f7-update-nkt-017.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "68fab82285be5308c06c1217b713721e8011130d95375d53a2d270a06b55730c"
+            }
+          ]
+        },
+        {
           "version": "nkt-016",
           "changelog": "Nikita firmware nkt-016.",
           "timestamp": 1789849291,
