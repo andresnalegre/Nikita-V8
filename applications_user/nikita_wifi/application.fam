@@ -1,0 +1,14 @@
+App(
+    appid="nikita_wifi",
+    name="WIFI",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="nikita_wifi_app",
+    requires=["gui"],
+    stack_size=4 * 1024,
+    fap_version="1.0",
+    fap_icon="icons/wifi_10px.png",
+    fap_category="GPIO",
+    fap_description="Nikita's WiFi. Drives an ESP32 Marauder board over the GPIO UART: scan, sniff, deauth, beacon, rickroll -- authorised testing only.",
+    fap_author="Nikita",
+    sources=["nikita_wifi.c"],
+)
