@@ -45,9 +45,8 @@ static void draw_textbox(Canvas* canvas, const FaceModel* m) {
     canvas_draw_rframe(canvas, 0, by, 128, bh, 2);
     canvas_set_font(canvas, FontSecondary);
 
-    // Generous inner padding so text never touches the border.
+    // Inner padding so text never touches the border.
     const int pad_x = 6;
-    const int max_w = 128 - pad_x * 2 - 4;
 
     // Nothing said yet (she's thinking): show a pulsing "..." so you see her
     // working from the moment the box appears.
@@ -58,65 +57,47 @@ static void draw_textbox(Canvas* canvas, const FaceModel* m) {
         canvas_draw_str(canvas, pad_x, by + 13, d);
         return;
     }
-    // Only the TAIL of the revealed text is ever visible (2 lines), so copy just
-    // that onto the stack -- NOT the whole 2KB buffer. This draw callback runs on
-    // the GUI thread's small stack; a 2KB local array here overflows it and the
-    // system takes a UsageFault. Keep this tiny.
-    char shown[224];
-    size_t start = (m->shown > sizeof(shown) - 1) ? m->shown - (sizeof(shown) - 1) : 0;
-    size_t n = m->shown - start;
-    if(n >= sizeof(shown)) n = sizeof(shown) - 1;
-    memcpy(shown, m->text + start, n);
-    shown[n] = '\0';
 
-    // Wrap into lines, keep the last 2 (rolling window) so the newest text shows.
-    char lines[2][64];
-    int line_count = 0;
-    char cur[64];
-    cur[0] = '\0';
-    const char* p = shown;
-    while(*p) {
-        while(*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t') p++;
-        if(!*p) break;
-        const char* start = p;
-        while(*p && *p != ' ' && *p != '\n' && *p != '\r' && *p != '\t') p++;
-        size_t wl = (size_t)(p - start);
-        char w[64];
-        if(wl >= sizeof(w)) wl = sizeof(w) - 1;
-        memcpy(w, start, wl);
-        w[wl] = '\0';
+    // Render the reply with MINIMAL stack and NO canvas_string_width. This draw
+    // callback runs on the GUI service thread, whose stack is small; the old
+    // path (a 2KB copy + per-word width measuring + several buffers) overflowed
+    // it and the CPU took a UsageFault the instant a reply appeared. Here we wrap
+    // by a fixed character budget into two tiny fixed lines -- a few dozen bytes
+    // of stack, no measuring calls. Show the visible tail (newest text).
+    const int kCols = 20;                 // chars per line at FontSecondary/118px
+    const size_t want = (size_t)kCols * 2 + 8;
+    size_t total = m->shown;
+    size_t begin = (total > want) ? total - want : 0;
+    const char* s = m->text + begin;
+    size_t n = total - begin;
 
-        char trial[130];
-        if(cur[0] == '\0') {
-            strlcpy(trial, w, sizeof(trial));
-        } else {
-            strlcpy(trial, cur, sizeof(trial));
-            strlcat(trial, " ", sizeof(trial));
-            strlcat(trial, w, sizeof(trial));
+    char line0[22];
+    char line1[22];
+    line0[0] = '\0';
+    line1[0] = '\0';
+    char* line[2] = {line0, line1};
+    int li = 0, col = 0;
+
+    size_t i = 0;
+    while(i < n && li < 2) {
+        while(i < n && (s[i] == ' ' || s[i] == '\n' || s[i] == '\r' || s[i] == '\t')) i++;
+        if(i >= n) break;
+        size_t ws = i;
+        while(i < n && s[i] != ' ' && s[i] != '\n' && s[i] != '\r' && s[i] != '\t') i++;
+        int wl = (int)(i - ws);
+        if(wl > kCols) wl = kCols; // clamp a giant token to the line width
+        int need = (col > 0 ? 1 : 0) + wl;
+        if(col + need > kCols) {
+            li++;
+            col = 0;
+            if(li >= 2) break;
         }
-        if((int)canvas_string_width(canvas, trial) <= max_w) {
-            strlcpy(cur, trial, sizeof(cur));
-        } else {
-            if(line_count < 2) {
-                strlcpy(lines[line_count++], cur, sizeof(lines[0]));
-            } else {
-                strlcpy(lines[0], lines[1], sizeof(lines[0]));
-                strlcpy(lines[1], cur, sizeof(lines[1]));
-            }
-            strlcpy(cur, w, sizeof(cur));
-        }
+        if(col > 0) line[li][col++] = ' ';
+        for(int k = 0; k < wl && col <= kCols; k++) line[li][col++] = s[ws + k];
+        line[li][col] = '\0';
     }
-    if(cur[0] != '\0') {
-        if(line_count < 2) {
-            strlcpy(lines[line_count++], cur, sizeof(lines[0]));
-        } else {
-            strlcpy(lines[0], lines[1], sizeof(lines[0]));
-            strlcpy(lines[1], cur, sizeof(lines[1]));
-        }
-    }
-    for(int i = 0; i < line_count; i++) {
-        canvas_draw_str(canvas, pad_x, by + 9 + i * 8, lines[i]);
-    }
+    canvas_draw_str(canvas, pad_x, by + 9, line0);
+    if(line1[0]) canvas_draw_str(canvas, pad_x, by + 17, line1);
 }
 
 static void face_draw_callback(Canvas* canvas, void* model) {
