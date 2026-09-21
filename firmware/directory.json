@@ -14,7 +14,7 @@
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-024/flipper-z-f7-update-nkt-024.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "75be651893724435ec1c09372ff3b6204d9a877d0d3d81d944c29c0e2f047cb1"
+              "sha256": "18836ea38ed01eabb2841a38fec9393ec5b8e4450930de708d244fb26def1f44"
             }
           ]
         },
@@ -151,7 +151,7 @@
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-024/flipper-z-f7-update-nkt-024.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "6663956c0296c987dcaf6cee7d1a9d841c2f1ac9d1f9632a49606a495a55356d"
+              "sha256": "18836ea38ed01eabb2841a38fec9393ec5b8e4450930de708d244fb26def1f44"
             }
           ]
         }
@@ -171,7 +171,7 @@
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-024/flipper-z-f7-update-nkt-024.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "6663956c0296c987dcaf6cee7d1a9d841c2f1ac9d1f9632a49606a495a55356d"
+              "sha256": "18836ea38ed01eabb2841a38fec9393ec5b8e4450930de708d244fb26def1f44"
             }
           ]
         }
