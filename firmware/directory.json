@@ -6,6 +6,19 @@
       "description": "Stable Nikita firmware. Recommended.",
       "versions": [
         {
+          "version": "nkt-018",
+          "changelog": "Nikita firmware nkt-018. Fixes the UsageFault crash when Nikita Buddy showed a reply (GUI-thread stack overflow) -- she now answers on the Flipper, with a 'thinking' box while she works. Her animated face + hold-RIGHT opens the Buddy.",
+          "timestamp": 1790612400,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-018/flipper-z-f7-update-nkt-018.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "2f0e7905e4cad171392d8404ad79cd90df0b303d0c77d68cabff3ce7f7b98a8b"
+            }
+          ]
+        },
+        {
           "version": "nkt-017",
           "changelog": "Nikita firmware nkt-017.",
           "timestamp": 1789986167,
