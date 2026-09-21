@@ -26,25 +26,47 @@
 
 typedef enum {
     WifiViewMenu,
+    WifiViewChannel,
     WifiViewOutput,
 } WifiView;
 
+// Order matches wifi_build_menu(). Everything the real ESP32 Marauder exposes
+// over serial is reachable here so Nikita isn't driving the board blind.
 typedef enum {
-    WifiCmdScan,
-    WifiCmdList,
-    WifiCmdSniffDeauth,
+    WifiCmdScanAP,
+    WifiCmdScanSta,
+    WifiCmdListAP,
+    WifiCmdListSta,
+    WifiCmdChannel, // opens the channel picker view
     WifiCmdSniffBeacon,
+    WifiCmdSniffProbe,
+    WifiCmdSniffDeauth,
+    WifiCmdSniffPMKID,
+    WifiCmdSniffPwn,
+    WifiCmdSniffRaw,
+    WifiCmdSniffEsp,
     WifiCmdAttackDeauth,
-    WifiCmdAttackBeacon,
+    WifiCmdAttackDeauthTgt,
+    WifiCmdAttackBeaconList,
+    WifiCmdAttackBeaconRand,
+    WifiCmdAttackBeaconAp,
+    WifiCmdAttackProbe,
     WifiCmdRickroll,
-    WifiCmdClear,
+    WifiCmdWardrive,
+    WifiCmdClearAP,
+    WifiCmdClearSta,
+    WifiCmdReboot,
     WifiCmdStop,
 } WifiCmd;
+
+// 2.4 GHz channels 1..14; the picker's item index + 1 == channel number.
+#define WIFI_CHANNELS 14
 
 typedef struct {
     Gui* gui;
     ViewDispatcher* view_dispatcher;
     Submenu* submenu;
+    Submenu* chan_menu;
     TextBox* text_box;
     FuriString* out; // accumulated board output (bounded)
     FuriStreamBuffer* rx_stream; // ISR -> GUI byte pipe
@@ -123,17 +145,50 @@ static void wifi_run_cmd(NikitaWifi* app, const char* label, const char* cmd) {
 static void wifi_menu_cb(void* context, uint32_t index) {
     NikitaWifi* app = context;
     switch(index) {
-    case WifiCmdScan: wifi_run_cmd(app, "Scan APs", "scanap"); break;
-    case WifiCmdList: wifi_run_cmd(app, "List APs", "list -a"); break;
-    case WifiCmdSniffDeauth: wifi_run_cmd(app, "Sniff deauth", "sniffdeauth"); break;
+    case WifiCmdScanAP: wifi_run_cmd(app, "Scan APs", "scanap"); break;
+    case WifiCmdScanSta: wifi_run_cmd(app, "Scan stations", "scansta"); break;
+    case WifiCmdListAP: wifi_run_cmd(app, "List APs", "list -a"); break;
+    case WifiCmdListSta: wifi_run_cmd(app, "List stations", "list -s"); break;
+    case WifiCmdChannel: wifi_switch(app, WifiViewChannel); break;
     case WifiCmdSniffBeacon: wifi_run_cmd(app, "Sniff beacon", "sniffbeacon"); break;
-    case WifiCmdAttackDeauth: wifi_run_cmd(app, "Deauth", "attack -t deauth"); break;
-    case WifiCmdAttackBeacon: wifi_run_cmd(app, "Beacon spam", "attack -t beacon -l"); break;
+    case WifiCmdSniffProbe: wifi_run_cmd(app, "Sniff probe", "sniffprobe"); break;
+    case WifiCmdSniffDeauth: wifi_run_cmd(app, "Sniff deauth", "sniffdeauth"); break;
+    case WifiCmdSniffPMKID: wifi_run_cmd(app, "Sniff PMKID", "sniffpmkid"); break;
+    case WifiCmdSniffPwn: wifi_run_cmd(app, "Sniff pwnagotchi", "sniffpwn"); break;
+    case WifiCmdSniffRaw: wifi_run_cmd(app, "Sniff raw", "sniffraw"); break;
+    case WifiCmdSniffEsp: wifi_run_cmd(app, "Sniff ESP", "sniffesp"); break;
+    case WifiCmdAttackDeauth: wifi_run_cmd(app, "Deauth all", "attack -t deauth"); break;
+    case WifiCmdAttackDeauthTgt:
+        wifi_run_cmd(app, "Deauth targeted", "attack -t deauth -c");
+        break;
+    case WifiCmdAttackBeaconList:
+        wifi_run_cmd(app, "Beacon (list)", "attack -t beacon -l");
+        break;
+    case WifiCmdAttackBeaconRand:
+        wifi_run_cmd(app, "Beacon (random)", "attack -t beacon -r");
+        break;
+    case WifiCmdAttackBeaconAp:
+        wifi_run_cmd(app, "Beacon (AP clone)", "attack -t beacon -a");
+        break;
+    case WifiCmdAttackProbe: wifi_run_cmd(app, "Probe flood", "attack -t probe"); break;
     case WifiCmdRickroll: wifi_run_cmd(app, "Rickroll", "attack -t rickroll"); break;
-    case WifiCmdClear: wifi_run_cmd(app, "Clear list", "clearap"); break;
+    case WifiCmdWardrive: wifi_run_cmd(app, "Wardrive", "wardrive"); break;
+    case WifiCmdClearAP: wifi_run_cmd(app, "Clear APs", "clearlist -a"); break;
+    case WifiCmdClearSta: wifi_run_cmd(app, "Clear stations", "clearlist -s"); break;
+    case WifiCmdReboot: wifi_run_cmd(app, "Reboot board", "reboot"); break;
     case WifiCmdStop: wifi_run_cmd(app, "Stop", "stopscan"); break;
     default: break;
     }
+}
+
+// Channel picker: item index i -> channel (i + 1).
+static void wifi_chan_cb(void* context, uint32_t index) {
+    NikitaWifi* app = context;
+    char label[16];
+    char cmd[20];
+    snprintf(label, sizeof(label), "Channel %lu", (unsigned long)(index + 1));
+    snprintf(cmd, sizeof(cmd), "channel -s %lu", (unsigned long)(index + 1));
+    wifi_run_cmd(app, label, cmd);
 }
 
 static bool wifi_back_cb(void* context) {
@@ -143,21 +198,54 @@ static bool wifi_back_cb(void* context) {
         wifi_switch(app, WifiViewMenu);
         return true;
     }
+    if(app->current == WifiViewChannel) {
+        wifi_switch(app, WifiViewMenu);
+        return true;
+    }
     return false; // from the menu -> exit
 }
 
 static void wifi_build_menu(NikitaWifi* app) {
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, "Nikita WIFI");
-    submenu_add_item(app->submenu, "Scan APs", WifiCmdScan, wifi_menu_cb, app);
-    submenu_add_item(app->submenu, "List APs", WifiCmdList, wifi_menu_cb, app);
-    submenu_add_item(app->submenu, "Sniff deauth", WifiCmdSniffDeauth, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Scan APs", WifiCmdScanAP, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Scan stations", WifiCmdScanSta, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "List APs", WifiCmdListAP, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "List stations", WifiCmdListSta, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Channel...", WifiCmdChannel, wifi_menu_cb, app);
     submenu_add_item(app->submenu, "Sniff beacon", WifiCmdSniffBeacon, wifi_menu_cb, app);
-    submenu_add_item(app->submenu, "Attack: deauth", WifiCmdAttackDeauth, wifi_menu_cb, app);
-    submenu_add_item(app->submenu, "Attack: beacon", WifiCmdAttackBeacon, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Sniff probe", WifiCmdSniffProbe, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Sniff deauth", WifiCmdSniffDeauth, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Sniff PMKID", WifiCmdSniffPMKID, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Sniff pwnagotchi", WifiCmdSniffPwn, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Sniff raw", WifiCmdSniffRaw, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Sniff ESP", WifiCmdSniffEsp, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Attack: deauth all", WifiCmdAttackDeauth, wifi_menu_cb, app);
+    submenu_add_item(
+        app->submenu, "Attack: deauth targeted", WifiCmdAttackDeauthTgt, wifi_menu_cb, app);
+    submenu_add_item(
+        app->submenu, "Attack: beacon list", WifiCmdAttackBeaconList, wifi_menu_cb, app);
+    submenu_add_item(
+        app->submenu, "Attack: beacon random", WifiCmdAttackBeaconRand, wifi_menu_cb, app);
+    submenu_add_item(
+        app->submenu, "Attack: beacon AP clone", WifiCmdAttackBeaconAp, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Attack: probe flood", WifiCmdAttackProbe, wifi_menu_cb, app);
     submenu_add_item(app->submenu, "Attack: rickroll", WifiCmdRickroll, wifi_menu_cb, app);
-    submenu_add_item(app->submenu, "Clear AP list", WifiCmdClear, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Wardrive", WifiCmdWardrive, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Clear AP list", WifiCmdClearAP, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Clear station list", WifiCmdClearSta, wifi_menu_cb, app);
+    submenu_add_item(app->submenu, "Reboot board", WifiCmdReboot, wifi_menu_cb, app);
     submenu_add_item(app->submenu, "Stop", WifiCmdStop, wifi_menu_cb, app);
+}
+
+static void wifi_build_chan_menu(NikitaWifi* app) {
+    submenu_reset(app->chan_menu);
+    submenu_set_header(app->chan_menu, "Set channel");
+    char label[16];
+    for(uint32_t i = 0; i < WIFI_CHANNELS; i++) {
+        snprintf(label, sizeof(label), "Channel %lu", (unsigned long)(i + 1));
+        submenu_add_item(app->chan_menu, label, i, wifi_chan_cb, app);
+    }
 }
 
 // ---- lifecycle ------------------------------------------------------------
@@ -178,6 +266,11 @@ static NikitaWifi* nikita_wifi_alloc(void) {
     app->submenu = submenu_alloc();
     wifi_build_menu(app);
     view_dispatcher_add_view(app->view_dispatcher, WifiViewMenu, submenu_get_view(app->submenu));
+
+    app->chan_menu = submenu_alloc();
+    wifi_build_chan_menu(app);
+    view_dispatcher_add_view(
+        app->view_dispatcher, WifiViewChannel, submenu_get_view(app->chan_menu));
 
     app->text_box = text_box_alloc();
     text_box_set_font(app->text_box, TextBoxFontText);
@@ -209,8 +302,10 @@ static void nikita_wifi_free(NikitaWifi* app) {
     }
 
     view_dispatcher_remove_view(app->view_dispatcher, WifiViewMenu);
+    view_dispatcher_remove_view(app->view_dispatcher, WifiViewChannel);
     view_dispatcher_remove_view(app->view_dispatcher, WifiViewOutput);
     submenu_free(app->submenu);
+    submenu_free(app->chan_menu);
     text_box_free(app->text_box);
     view_dispatcher_free(app->view_dispatcher);
 
