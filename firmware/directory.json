@@ -7,14 +7,14 @@
       "versions": [
         {
           "version": "nkt-021",
-          "changelog": "Nikita firmware nkt-021. NEW WIFI app (native ESP32 Marauder over GPIO UART: scan/sniff/attack/stop). Nikita Buddy opens on her face (OK -> menu). Buddy replies are a paged video-game dialogue box (OK/Down to advance, Up back) -- nothing truncated.",
-          "timestamp": 1790632200,
+          "changelog": "Nikita firmware nkt-021.",
+          "timestamp": 1790002192,
           "files": [
             {
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-021/flipper-z-f7-update-nkt-021.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "1ef488ec1351ee964e03376007cc2b70c065001f86916b1c2763647e240f58b4"
+              "sha256": "aea1eaeef6cba41d215f60735ad0728746d2bca88a5885a8faaa0d0dfe48c5fd"
             }
           ]
         },
@@ -132,19 +132,6 @@
               "target": "f7",
               "type": "update_tgz",
               "sha256": "9b4cc0eb2634cd76744194677a3d52e107c4725fc1dd2a835d71c7213393f2e9"
-            }
-          ]
-        },
-        {
-          "version": "nkt-010",
-          "changelog": "Nikita firmware nkt-010.",
-          "timestamp": 1789386431,
-          "files": [
-            {
-              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-010/flipper-z-f7-update-nkt-010.tgz",
-              "target": "f7",
-              "type": "update_tgz",
-              "sha256": "7f65ac5028854324f37464ef9aebd011185c21f6c5d131cd70b253a538196bd0"
             }
           ]
         }
