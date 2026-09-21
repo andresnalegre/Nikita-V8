@@ -7,14 +7,14 @@
       "versions": [
         {
           "version": "nkt-018",
-          "changelog": "Nikita firmware nkt-018. Fixes the UsageFault crash when Nikita Buddy showed a reply (GUI-thread stack overflow) -- she now answers on the Flipper, with a 'thinking' box while she works. Her animated face + hold-RIGHT opens the Buddy.",
-          "timestamp": 1790612400,
+          "changelog": "Nikita firmware nkt-018.",
+          "timestamp": 1789987220,
           "files": [
             {
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-018/flipper-z-f7-update-nkt-018.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "2f0e7905e4cad171392d8404ad79cd90df0b303d0c77d68cabff3ce7f7b98a8b"
+              "sha256": "e0b2ac1f9548800d68139a9d36b6920d00a5d77c51d143c9e19bc9df374894f8"
             }
           ]
         },
@@ -132,19 +132,6 @@
               "target": "f7",
               "type": "update_tgz",
               "sha256": "4d6317edade94c96f60c21fdae88eda9449dddf44d4c3202bf3cd17fe22057ed"
-            }
-          ]
-        },
-        {
-          "version": "nkt-008",
-          "changelog": "Nikita firmware nkt-008.",
-          "timestamp": 1789217578,
-          "files": [
-            {
-              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-008/flipper-z-f7-update-nkt-008.tgz",
-              "target": "f7",
-              "type": "update_tgz",
-              "sha256": "0bac5bdc635426e582f7fb3b80a94d7392764e7a2bda6f93095dc9cb6132992d"
             }
           ]
         }
