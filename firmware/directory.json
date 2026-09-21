@@ -6,6 +6,19 @@
       "description": "Stable Nikita firmware. Recommended.",
       "versions": [
         {
+          "version": "nkt-022",
+          "changelog": "Nikita firmware nkt-022. Buddy: no box on the opening face (just Nikita); her reply appears in a box that types out, Enter dismisses it, Up/Down scroll long answers. Includes the WIFI app (ESP32 Marauder over GPIO).",
+          "timestamp": 1790634600,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-022/flipper-z-f7-update-nkt-022.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "6d5348e3ff8d2ae1444f21d4f38af255640fc8f315c8be1c7b6f297f117f8d1f"
+            }
+          ]
+        },
+        {
           "version": "nkt-021",
           "changelog": "Nikita firmware nkt-021.",
           "timestamp": 1790002192,
