@@ -6,6 +6,19 @@
       "description": "Stable Nikita firmware. Recommended.",
       "versions": [
         {
+          "version": "nkt-023",
+          "changelog": "Nikita firmware nkt-023. No empty dialogue box: the opening face is clean and nothing shows while thinking -- the box appears ONLY when Nikita has text (types out, Enter dismisses, Up/Down scroll). Includes the WIFI app (ESP32 Marauder over GPIO).",
+          "timestamp": 1790635800,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-023/flipper-z-f7-update-nkt-023.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "f9016427cf19e0a60ae90dcf6322b68eafc5430fe921c677703cfbbb7efa13d1"
+            }
+          ]
+        },
+        {
           "version": "nkt-022",
           "changelog": "Nikita firmware nkt-022.",
           "timestamp": 1790003062,
