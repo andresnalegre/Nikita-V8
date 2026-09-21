@@ -100,6 +100,7 @@ typedef struct {
     View* face;             // Nikita's animated face (reply screen)
     FuriTimer* poll_timer;
     FuriTimer* anim_timer;  // drives the face while it's on screen
+    bool intro;             // true while the opening Nikita face is showing (OK -> menu)
 
     char prompt[NB_PROMPT_MAX];
     char reply[NB_REPLY_MAX];
@@ -367,10 +368,18 @@ static void nb_open_text_input(NikitaBuddy* app) {
     nb_switch(app, NbViewText);
 }
 
-// OK on the face screen -- opens the keyboard for the next line, so the chat
-// flows without a trip back to the menu.
+// OK on the face screen. On the OPENING face (intro) it takes you to the menu --
+// Nikita greets you first, the menu is one press away. Once you're in a
+// conversation, OK opens the keyboard for the next line so the chat flows.
 static void nb_face_ok_cb(void* context) {
-    nb_open_text_input((NikitaBuddy*)context);
+    NikitaBuddy* app = context;
+    if(app->intro) {
+        app->intro = false;
+        furi_timer_stop(app->anim_timer);
+        nb_switch(app, NbViewMenu);
+        return;
+    }
+    nb_open_text_input(app);
 }
 
 // Drives the face animation: fires on a ~10fps timer and hands the tick to the
@@ -381,6 +390,7 @@ static void nb_anim_timer_cb(void* context) {
 }
 
 static void nb_begin_wait(NikitaBuddy* app) {
+    app->intro = false; // now it's a real conversation, OK asks again
     // Nikita comes on screen thinking, and starts moving; the reply, when it
     // lands, makes her talk and types itself into the box below her.
     nikita_face_set_text(app->face, "");
@@ -493,11 +503,27 @@ static void nb_menu_cb(void* context, uint32_t index) {
     }
 }
 
-// Back: from a sub-view return to the menu; from the menu, leave the app.
+// The opening screen: Nikita's face, alive, no menu. OK takes you to the menu.
+static void nb_show_intro(NikitaBuddy* app) {
+    app->intro = true;
+    app->answered = true; // not waiting on a reply
+    nikita_face_set_text(app->face, "");
+    nikita_face_set_mood(app->face, NikitaFaceIdle);
+    nb_switch(app, NbViewFace);
+    furi_timer_start(app->anim_timer, furi_ms_to_ticks(100));
+}
+
+// Back navigation: the Nikita face is the root. Intro face -> exit; menu ->
+// back to the Nikita face; a conversation/other sub-view -> menu.
 static bool nb_back_event_cb(void* context) {
     NikitaBuddy* app = context;
+    if(app->current_view == NbViewFace && app->intro) {
+        return false; // the opening Nikita face is the root -> leave the app
+    }
     if(app->current_view == NbViewMenu) {
-        return false; // exit
+        furi_timer_stop(app->poll_timer);
+        nb_show_intro(app); // back from the menu returns to Nikita
+        return true;
     }
     furi_timer_stop(app->poll_timer);
     furi_timer_stop(app->anim_timer);
@@ -589,7 +615,7 @@ static void nikita_buddy_free(NikitaBuddy* app) {
 int32_t nikita_buddy_app(void* p) {
     UNUSED(p);
     NikitaBuddy* app = nikita_buddy_alloc();
-    nb_switch(app, NbViewMenu);
+    nb_show_intro(app); // Nikita greets you first; OK opens the menu
     view_dispatcher_run(app->view_dispatcher);
     nikita_buddy_free(app);
     return 0;
