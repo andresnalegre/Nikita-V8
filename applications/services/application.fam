@@ -14,5 +14,6 @@ App(
         "loader",
         "power",
         "namechanger_srv",
+        "nikita_wifi_cli",
     ],
 )

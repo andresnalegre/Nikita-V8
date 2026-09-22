@@ -1,0 +1,7 @@
+App(
+    appid="nikita_wifi_cli",
+    apptype=FlipperAppType.STARTUP,
+    entry_point="nikita_wifi_cli_on_system_start",
+    requires=["cli"],
+    order=1310,
+)
