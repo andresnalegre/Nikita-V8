@@ -22,6 +22,7 @@
 #include <toolbox/cli/cli_registry.h>
 #include <toolbox/cli/cli_command.h>
 #include <toolbox/args.h>
+#include <expansion/expansion.h>
 #include <string.h>
 
 #define MARAUDER_BAUD 115200
@@ -65,13 +66,20 @@ static void nikita_marauder_cli(PipeSide* pipe, FuriString* args, void* context)
         return;
     }
 
+    // Pause the expansion module service -- it shares this USART and will
+    // furi_check-fault the firmware if it probes while the board is streaming.
+    Expansion* expansion = furi_record_open(RECORD_EXPANSION);
+    expansion_disable(expansion);
+
     FuriHalSerialHandle* serial = furi_hal_serial_control_acquire(FuriHalSerialIdUsart);
     if(!serial) {
         printf("UART busy -- close the on-device WIFI app first (it holds the GPIO UART).\r\n");
+        expansion_enable(expansion);
+        furi_record_close(RECORD_EXPANSION);
         return;
     }
 
-    FuriStreamBuffer* sb = furi_stream_buffer_alloc(1024, 1);
+    FuriStreamBuffer* sb = furi_stream_buffer_alloc(4096, 1);
     furi_hal_serial_init(serial, MARAUDER_BAUD);
     furi_hal_serial_async_rx_start(serial, nikita_marauder_rx, sb, false);
 
@@ -79,27 +87,63 @@ static void nikita_marauder_cli(PipeSide* pipe, FuriString* args, void* context)
     furi_hal_serial_tx(serial, (const uint8_t*)cmd, strlen(cmd));
     furi_hal_serial_tx(serial, (const uint8_t*)"\r\n", 2);
 
-    // Stream the board's reply back to the shell for the read window.
+    // Drain the board FAST into a bounded tail buffer -- do NOT printf inside the
+    // loop. Per-chunk printf on the CLI thread is slow enough that, under a heavy
+    // scan flood at 115200, the UART FIFO overruns and the HAL furi_check-faults.
+    // We keep only the last WINDOW bytes (enough for an AP list / result) and
+    // print them once at the end.
+#define MARAUDER_TAIL 3072
+    static char tail[MARAUDER_TAIL]; // static: keep it off the small CLI stack
+    size_t tlen = 0;
+    uint8_t buf[256];
+
     uint32_t start = furi_get_tick();
     uint32_t dur_ticks = furi_ms_to_ticks(dur_ms);
-    uint8_t buf[128];
     while(furi_get_tick() - start < dur_ticks) {
-        size_t n = furi_stream_buffer_receive(sb, buf, sizeof(buf), furi_ms_to_ticks(100));
-        if(n) {
-            printf("%.*s", (int)n, (char*)buf);
-            fflush(stdout);
+        size_t n = furi_stream_buffer_receive(sb, buf, sizeof(buf), furi_ms_to_ticks(20));
+        if(!n) continue; // n <= sizeof(buf) (256) < MARAUDER_TAIL, always
+        if(tlen + n > MARAUDER_TAIL) {
+            size_t drop = tlen + n - MARAUDER_TAIL;
+            memmove(tail, tail + drop, tlen - drop);
+            tlen -= drop;
         }
+        memcpy(tail + tlen, buf, n);
+        tlen += n;
+    }
+
+    // Quiet the board before handing the UART back, then let it fall silent.
+    furi_hal_serial_tx(serial, (const uint8_t*)"stopscan\r\n", 10);
+    uint32_t q = furi_get_tick();
+    while(furi_get_tick() - q < furi_ms_to_ticks(500)) {
+        furi_stream_buffer_receive(sb, buf, sizeof(buf), furi_ms_to_ticks(20));
     }
 
     furi_hal_serial_async_rx_stop(serial);
     furi_hal_serial_deinit(serial);
     furi_hal_serial_control_release(serial);
     furi_stream_buffer_free(sb);
-    printf("\r\n");
+    expansion_enable(expansion);
+    furi_record_close(RECORD_EXPANSION);
+
+    // Now it is safe to print (board quiet, line released).
+    if(tlen) printf("%.*s\r\n", (int)tlen, tail);
+    else printf("(no output)\r\n");
 }
 
 int32_t nikita_wifi_cli_on_system_start(void* p) {
     UNUSED(p);
+
+    // GAMBIARRA DEFINITIVA: the ESP32 devboard permanently occupies the GPIO
+    // USART, so the expansion-module service (which probes that same line to
+    // auto-detect add-ons) can NEVER coexist with it -- its probe collides with
+    // the board's traffic and furi_check-faults the firmware. We disable it once
+    // at boot and never re-enable it, so nothing ever touches the line but us.
+    // (Cost: no auto-detect of other expansion modules, which is impossible
+    // anyway while the board is plugged in.)
+    Expansion* expansion = furi_record_open(RECORD_EXPANSION);
+    expansion_disable(expansion);
+    furi_record_close(RECORD_EXPANSION);
+
 #ifdef SRV_CLI
     CliRegistry* registry = furi_record_open(RECORD_CLI);
     cli_registry_add_command(

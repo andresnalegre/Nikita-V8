@@ -16,6 +16,7 @@
 #include <gui/modules/text_box.h>
 #include <gui/modules/text_input.h>
 #include <storage/storage.h>
+#include <expansion/expansion.h>
 #include <string.h>
 
 // Tee everything the board prints to the Flipper SD so Nikita (over BLE/USB)
@@ -46,7 +47,11 @@ typedef struct {
 // "save to sdcard", script engine) are intentionally left out -- everything
 // here is a real command the ESP32 board understands.
 static const WifiItem k_items[] = {
-    {"Scan", {"all", "ping", "arp"}, 3, {"scanall", "pingscan", "arpscan"}, ArgNone},
+    {"Scan",
+     {"APs", "stations", "all", "ping", "arp"},
+     5,
+     {"scanap", "scansta", "scanall", "pingscan", "arpscan"},
+     ArgNone},
     {"Recon",
      {"wifi", "ble", "status", "stop"},
      4,
@@ -184,6 +189,7 @@ typedef struct {
     FuriStreamBuffer* rx_stream;
     FuriTimer* pump;
     FuriHalSerialHandle* serial;
+    Expansion* expansion;
     Storage* storage;
     File* log;
     WifiView current;
@@ -401,6 +407,12 @@ static NikitaWifi* nikita_wifi_alloc(void) {
 
     view_dispatcher_attach_to_gui(app->view_dispatcher, app->gui, ViewDispatcherTypeFullscreen);
 
+    // The expansion service also listens on this USART to auto-detect modules;
+    // it MUST be paused while we own the line, or it furi_check-faults the
+    // firmware the moment the board floods data during a scan.
+    app->expansion = furi_record_open(RECORD_EXPANSION);
+    expansion_disable(app->expansion);
+
     app->serial = furi_hal_serial_control_acquire(FuriHalSerialIdUsart);
     if(app->serial) {
         furi_hal_serial_init(app->serial, WIFI_BAUD);
@@ -427,10 +439,20 @@ static void nikita_wifi_free(NikitaWifi* app) {
     furi_timer_free(app->pump);
 
     if(app->serial) {
+        // Quiet the board and let it fall silent BEFORE we release the line and
+        // re-enable the expansion service -- otherwise expansion probes a still-
+        // streaming USART and furi_check-faults the firmware.
         wifi_send(app, "stopscan");
+        furi_delay_ms(500);
         furi_hal_serial_async_rx_stop(app->serial);
         furi_hal_serial_deinit(app->serial);
         furi_hal_serial_control_release(app->serial);
+    }
+
+    // Hand the USART back to the expansion service.
+    if(app->expansion) {
+        expansion_enable(app->expansion);
+        furi_record_close(RECORD_EXPANSION);
     }
 
     if(app->log) {
