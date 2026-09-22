@@ -34,6 +34,7 @@
 #include <toolbox/cli/cli_command.h>
 #include <toolbox/args.h>
 #include <string.h>
+#include "nikita_agent_bridge.h"
 
 #define AGENT_DIR "/ext/nikita/agent"
 #define AGENT_REQ AGENT_DIR "/req"
@@ -150,6 +151,38 @@ static bool agent_dispatch(NikitaAgent* app, const char* req, FuriString* res) {
         furi_string_cat_str(res, "data: rebooting\n");
         furi_hal_power_reset();
         return true;
+
+    } else if(!strcmp(op, "hid.type")) {
+        // Type arbitrary text into the plugged-in computer as a USB keyboard.
+        char text[512];
+        if(!agent_get(req, "text", text, sizeof(text))) {
+            furi_string_cat_str(res, "data: hid.type needs text:\n");
+            return false;
+        }
+        FuriHalUsbInterface* prev = furi_hal_usb_get_config();
+        if(furi_hal_usb_is_locked() || !furi_hal_usb_set_config(&usb_hid, NULL)) {
+            furi_string_cat_str(res, "data: USB busy/locked\n");
+            return false;
+        }
+        furi_delay_ms(1500);
+        nkb_type(text);
+        furi_delay_ms(300);
+        furi_hal_usb_set_config(prev, NULL);
+        furi_string_cat_str(res, "data: typed\n");
+        return true;
+
+    } else if(!strcmp(op, "bridge.install")) {
+        // Ship-in-firmware bridge bootstrap, typed into the target over HID.
+        char os[12];
+        if(!agent_get(req, "os", os, sizeof(os))) strlcpy(os, "mac", sizeof(os));
+        int rc = nikita_agent_install_bridge(os);
+        if(rc == 0) {
+            furi_string_cat_printf(res, "data: bridge install typed for %s\n", os);
+            return true;
+        }
+        furi_string_cat_printf(
+            res, "data: install failed (%s)\n", rc == 1 ? "USB locked" : "USB switch failed");
+        return false;
     }
 
     furi_string_cat_printf(res, "data: unknown op '%s'\n", op);
