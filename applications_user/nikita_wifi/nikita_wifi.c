@@ -15,7 +15,13 @@
 #include <gui/modules/variable_item_list.h>
 #include <gui/modules/text_box.h>
 #include <gui/modules/text_input.h>
+#include <storage/storage.h>
 #include <string.h>
+
+// Tee everything the board prints to the Flipper SD so Nikita (over BLE/USB)
+// can read_file it, analyse it and format results -- not just watch the screen.
+#define WIFI_LOG_DIR "/ext/apps_data/nikita_wifi"
+#define WIFI_LOG_PATH WIFI_LOG_DIR "/last.log"
 
 #define WIFI_BAUD 115200
 #define WIFI_OUT_MAX 4096
@@ -178,6 +184,8 @@ typedef struct {
     FuriStreamBuffer* rx_stream;
     FuriTimer* pump;
     FuriHalSerialHandle* serial;
+    Storage* storage;
+    File* log;
     WifiView current;
     uint32_t pending_index; // row awaiting keyboard input
     char input_buf[WIFI_INPUT_MAX];
@@ -203,7 +211,16 @@ static void wifi_send(NikitaWifi* app, const char* cmd) {
     furi_hal_serial_tx(app->serial, (const uint8_t*)"\n", 1);
 }
 
+// Append to the SD log (best-effort; the app works fine if the card is absent).
+static void wifi_log(NikitaWifi* app, const char* s, size_t n) {
+    if(app->log && n) {
+        storage_file_write(app->log, s, n);
+        storage_file_sync(app->log); // flush so a reader over BLE sees it live
+    }
+}
+
 static void wifi_out_append(NikitaWifi* app, const char* data) {
+    wifi_log(app, data, strlen(data));
     furi_string_cat_str(app->out, data);
     size_t n = furi_string_size(app->out);
     if(n > WIFI_OUT_MAX) {
@@ -243,6 +260,10 @@ static void wifi_run(NikitaWifi* app, const char* label, const char* cmd) {
     furi_string_printf(app->out, "> %s\n", label);
     text_box_set_text(app->text_box, furi_string_get_cstr(app->out));
     text_box_set_focus(app->text_box, TextBoxFocusEnd);
+    // Mark the command in the log so Nikita can segment the session's output.
+    char hdr[80];
+    int hn = snprintf(hdr, sizeof(hdr), "\n=== %s : %s ===\n", label, cmd);
+    if(hn > 0) wifi_log(app, hdr, (size_t)hn);
     wifi_send(app, cmd);
     wifi_switch(app, WifiViewOutput);
 }
@@ -365,6 +386,16 @@ static NikitaWifi* nikita_wifi_alloc(void) {
         furi_hal_serial_async_rx_start(app->serial, wifi_rx_cb, app, false);
     }
 
+    // Fresh session log on the Flipper SD for Nikita to read/analyse later.
+    app->storage = furi_record_open(RECORD_STORAGE);
+    storage_common_mkdir(app->storage, "/ext/apps_data");
+    storage_common_mkdir(app->storage, WIFI_LOG_DIR);
+    app->log = storage_file_alloc(app->storage);
+    if(!storage_file_open(app->log, WIFI_LOG_PATH, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
+        storage_file_free(app->log);
+        app->log = NULL;
+    }
+
     app->pump = furi_timer_alloc(wifi_pump_timer, FuriTimerTypePeriodic, app);
     furi_timer_start(app->pump, furi_ms_to_ticks(100));
     return app;
@@ -380,6 +411,12 @@ static void nikita_wifi_free(NikitaWifi* app) {
         furi_hal_serial_deinit(app->serial);
         furi_hal_serial_control_release(app->serial);
     }
+
+    if(app->log) {
+        storage_file_close(app->log);
+        storage_file_free(app->log);
+    }
+    furi_record_close(RECORD_STORAGE);
 
     view_dispatcher_remove_view(app->view_dispatcher, WifiViewMenu);
     view_dispatcher_remove_view(app->view_dispatcher, WifiViewInput);
