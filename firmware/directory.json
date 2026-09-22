@@ -7,14 +7,14 @@
       "versions": [
         {
           "version": "nkt-032",
-          "changelog": "Nikita Agent Service: bridge.install (3 OSes, HID) + hid.type + sys.* over the mailbox.",
-          "timestamp": 1790093369,
+          "changelog": "Nikita firmware nkt-032.",
+          "timestamp": 1790092795,
           "files": [
             {
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-032/flipper-z-f7-update-nkt-032.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "b56d869b9568df4417739ce8be1cd31761da5e5f8082c5dd8ddf196f5f27a89d"
+              "sha256": "0fb5dfc90eb7e9cdd6f32b327d698a651d6ca4faddbee35a5b5a61196a9832e1"
             }
           ]
         },
@@ -132,19 +132,6 @@
               "target": "f7",
               "type": "update_tgz",
               "sha256": "aea1eaeef6cba41d215f60735ad0728746d2bca88a5885a8faaa0d0dfe48c5fd"
-            }
-          ]
-        },
-        {
-          "version": "nkt-019",
-          "changelog": "Nikita firmware nkt-019.",
-          "timestamp": 1789987911,
-          "files": [
-            {
-              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-019/flipper-z-f7-update-nkt-019.tgz",
-              "target": "f7",
-              "type": "update_tgz",
-              "sha256": "2dab556e41afb78b466e79cb37bafa71e4aebfd8ba9c42ad8df948ee95f13c79"
             }
           ]
         }
