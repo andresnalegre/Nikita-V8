@@ -6,6 +6,19 @@
       "description": "Stable Nikita firmware. Recommended.",
       "versions": [
         {
+          "version": "nkt-026",
+          "changelog": "Nikita firmware nkt-026. WIFI app two-level menu -- pick a category and see EVERY option (all attacks, all sniffs, BLE spam). Board output teed to /ext/apps_data/nikita_wifi/last.log. New built-in marauder CLI command: run any Marauder command over the Flipper shell and get output back (Nikita end-to-end WiFi). Authorised testing only.",
+          "timestamp": 1790067601,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-026/flipper-z-f7-update-nkt-026.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "ff987e7d68500672a009ba9e6ae935d22c9d20b3d7ca00e589ebfc892d398196"
+            }
+          ]
+        },
+        {
           "version": "nkt-025",
           "changelog": "Nikita firmware nkt-025.",
           "timestamp": 1790020991,
@@ -143,6 +156,19 @@
       "description": "Nikita firmware under test before it becomes a release.",
       "versions": [
         {
+          "version": "nkt-026",
+          "changelog": "Nikita firmware nkt-026. WIFI app two-level menu -- pick a category and see EVERY option (all attacks, all sniffs, BLE spam). Board output teed to /ext/apps_data/nikita_wifi/last.log. New built-in marauder CLI command: run any Marauder command over the Flipper shell and get output back (Nikita end-to-end WiFi). Authorised testing only.",
+          "timestamp": 1790067601,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-026/flipper-z-f7-update-nkt-026.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "ff987e7d68500672a009ba9e6ae935d22c9d20b3d7ca00e589ebfc892d398196"
+            }
+          ]
+        },
+        {
           "version": "nkt-025",
           "changelog": "Nikita firmware nkt-025. WIFI in the MAIN MENU (wifi icon). WIFI app now full ESP32 Marauder parity: 35 categories -- scan/recon/list/select, attacks + BLE spam, beacon, targeted, port scan, full sniff set (PMKID/pwn/BT/airtag...), fox hunt, evil portal, wardrive, GPS, channel, LED, settings, keyboard args. Authorised testing only.",
           "timestamp": 1790064056,
@@ -175,6 +201,19 @@
       "title": "Development",
       "description": "Nikita firmware built from the tip. Expect bugs.",
       "versions": [
+        {
+          "version": "nkt-026",
+          "changelog": "Nikita firmware nkt-026. WIFI app two-level menu -- pick a category and see EVERY option (all attacks, all sniffs, BLE spam). Board output teed to /ext/apps_data/nikita_wifi/last.log. New built-in marauder CLI command: run any Marauder command over the Flipper shell and get output back (Nikita end-to-end WiFi). Authorised testing only.",
+          "timestamp": 1790067601,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-026/flipper-z-f7-update-nkt-026.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "ff987e7d68500672a009ba9e6ae935d22c9d20b3d7ca00e589ebfc892d398196"
+            }
+          ]
+        },
         {
           "version": "nkt-025",
           "changelog": "Nikita firmware nkt-025. WIFI in the MAIN MENU (wifi icon). WIFI app now full ESP32 Marauder parity: 35 categories -- scan/recon/list/select, attacks + BLE spam, beacon, targeted, port scan, full sniff set (PMKID/pwn/BT/airtag...), fox hunt, evil portal, wardrive, GPS, channel, LED, settings, keyboard args. Authorised testing only.",
