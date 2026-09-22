@@ -7,14 +7,14 @@
       "versions": [
         {
           "version": "nkt-031",
-          "changelog": "Nikita firmware nkt-031. Nikita Agent Service (headless control plane): mailbox /ext/nikita/agent/req->res (bridge-free) + nagent CLI; core sys.* ops. Foundation for programmable control of every Flipper subsystem.",
-          "timestamp": 1790091911,
+          "changelog": "Nikita firmware nkt-031.",
+          "timestamp": 1790091820,
           "files": [
             {
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-031/flipper-z-f7-update-nkt-031.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "0576d7b7b0ce1174180822ae00e8b289570a03fd03d1e945e435faa0a1d11ce4"
+              "sha256": "cd32f74968527a94b2635986495250c5499644d72d0200136420e026727000c8"
             }
           ]
         },
@@ -132,19 +132,6 @@
               "target": "f7",
               "type": "update_tgz",
               "sha256": "2dab556e41afb78b466e79cb37bafa71e4aebfd8ba9c42ad8df948ee95f13c79"
-            }
-          ]
-        },
-        {
-          "version": "nkt-018",
-          "changelog": "Nikita firmware nkt-018.",
-          "timestamp": 1789987220,
-          "files": [
-            {
-              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-018/flipper-z-f7-update-nkt-018.tgz",
-              "target": "f7",
-              "type": "update_tgz",
-              "sha256": "e0b2ac1f9548800d68139a9d36b6920d00a5d77c51d143c9e19bc9df374894f8"
             }
           ]
         }
