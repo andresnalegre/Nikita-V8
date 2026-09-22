@@ -6,6 +6,19 @@
       "description": "Stable Nikita firmware. Recommended.",
       "versions": [
         {
+          "version": "nkt-029",
+          "changelog": "Nikita firmware nkt-029. Fixes the WiFi scan furi_check crash (expansion service USART collision + CLI UART overrun) and returns real AP results. scanap is the reliable AP scan. End-to-end marauder CLI. Authorised testing only.",
+          "timestamp": 1790071037,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-029/flipper-z-f7-update-nkt-029.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "3ae120a2cc6fd6f6028d44b2ca4f52287f602b69dd6bc735b720b8c131009243"
+            }
+          ]
+        },
+        {
           "version": "nkt-026",
           "changelog": "Nikita firmware nkt-026.",
           "timestamp": 1790067320,
@@ -143,6 +156,19 @@
       "description": "Nikita firmware under test before it becomes a release.",
       "versions": [
         {
+          "version": "nkt-029",
+          "changelog": "Nikita firmware nkt-029. Fixes the WiFi scan furi_check crash (expansion service USART collision + CLI UART overrun) and returns real AP results. scanap is the reliable AP scan. End-to-end marauder CLI. Authorised testing only.",
+          "timestamp": 1790071037,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-029/flipper-z-f7-update-nkt-029.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "3ae120a2cc6fd6f6028d44b2ca4f52287f602b69dd6bc735b720b8c131009243"
+            }
+          ]
+        },
+        {
           "version": "nkt-026",
           "changelog": "Nikita firmware nkt-026. WIFI app two-level menu -- pick a category and see EVERY option (all attacks, all sniffs, BLE spam). Board output teed to /ext/apps_data/nikita_wifi/last.log. New built-in marauder CLI command: run any Marauder command over the Flipper shell and get output back (Nikita end-to-end WiFi). Authorised testing only.",
           "timestamp": 1790067601,
@@ -188,6 +214,19 @@
       "title": "Development",
       "description": "Nikita firmware built from the tip. Expect bugs.",
       "versions": [
+        {
+          "version": "nkt-029",
+          "changelog": "Nikita firmware nkt-029. Fixes the WiFi scan furi_check crash (expansion service USART collision + CLI UART overrun) and returns real AP results. scanap is the reliable AP scan. End-to-end marauder CLI. Authorised testing only.",
+          "timestamp": 1790071037,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-029/flipper-z-f7-update-nkt-029.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "3ae120a2cc6fd6f6028d44b2ca4f52287f602b69dd6bc735b720b8c131009243"
+            }
+          ]
+        },
         {
           "version": "nkt-026",
           "changelog": "Nikita firmware nkt-026. WIFI app two-level menu -- pick a category and see EVERY option (all attacks, all sniffs, BLE spam). Board output teed to /ext/apps_data/nikita_wifi/last.log. New built-in marauder CLI command: run any Marauder command over the Flipper shell and get output back (Nikita end-to-end WiFi). Authorised testing only.",
