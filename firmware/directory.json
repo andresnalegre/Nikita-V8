@@ -6,6 +6,19 @@
       "description": "Stable Nikita firmware. Recommended.",
       "versions": [
         {
+          "version": "nkt-030",
+          "changelog": "Nikita firmware nkt-030. WIFI command mailbox (bridge-free: write /ext/apps_data/nikita_wifi/cmd, read last.log), snapshot logging (reads never hang), crash-hardened. Verified: 58 APs via mailbox, no crash. Authorised testing only.",
+          "timestamp": 1790083859,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-030/flipper-z-f7-update-nkt-030.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "97bee7ddce3f634d3c8eb09154a2206aac55f46ebba933658c8db954344e34e4"
+            }
+          ]
+        },
+        {
           "version": "nkt-029",
           "changelog": "Nikita firmware nkt-029.",
           "timestamp": 1790070995,
@@ -143,6 +156,19 @@
       "description": "Nikita firmware under test before it becomes a release.",
       "versions": [
         {
+          "version": "nkt-030",
+          "changelog": "Nikita firmware nkt-030. WIFI command mailbox (bridge-free: write /ext/apps_data/nikita_wifi/cmd, read last.log), snapshot logging (reads never hang), crash-hardened. Verified: 58 APs via mailbox, no crash. Authorised testing only.",
+          "timestamp": 1790083859,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-030/flipper-z-f7-update-nkt-030.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "97bee7ddce3f634d3c8eb09154a2206aac55f46ebba933658c8db954344e34e4"
+            }
+          ]
+        },
+        {
           "version": "nkt-029",
           "changelog": "Nikita firmware nkt-029. Fixes the WiFi scan furi_check crash (expansion service USART collision + CLI UART overrun) and returns real AP results. scanap is the reliable AP scan. End-to-end marauder CLI. Authorised testing only.",
           "timestamp": 1790071037,
@@ -201,6 +227,19 @@
       "title": "Development",
       "description": "Nikita firmware built from the tip. Expect bugs.",
       "versions": [
+        {
+          "version": "nkt-030",
+          "changelog": "Nikita firmware nkt-030. WIFI command mailbox (bridge-free: write /ext/apps_data/nikita_wifi/cmd, read last.log), snapshot logging (reads never hang), crash-hardened. Verified: 58 APs via mailbox, no crash. Authorised testing only.",
+          "timestamp": 1790083859,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-030/flipper-z-f7-update-nkt-030.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "97bee7ddce3f634d3c8eb09154a2206aac55f46ebba933658c8db954344e34e4"
+            }
+          ]
+        },
         {
           "version": "nkt-029",
           "changelog": "Nikita firmware nkt-029. Fixes the WiFi scan furi_check crash (expansion service USART collision + CLI UART overrun) and returns real AP results. scanap is the reliable AP scan. End-to-end marauder CLI. Authorised testing only.",
