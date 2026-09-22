@@ -7,14 +7,14 @@
       "versions": [
         {
           "version": "nkt-029",
-          "changelog": "Nikita firmware nkt-029. Fixes the WiFi scan furi_check crash (expansion service USART collision + CLI UART overrun) and returns real AP results. scanap is the reliable AP scan. End-to-end marauder CLI. Authorised testing only.",
-          "timestamp": 1790071037,
+          "changelog": "Nikita firmware nkt-029.",
+          "timestamp": 1790070995,
           "files": [
             {
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-029/flipper-z-f7-update-nkt-029.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "3ae120a2cc6fd6f6028d44b2ca4f52287f602b69dd6bc735b720b8c131009243"
+              "sha256": "7525452390ab0f96549a7594f71a25fc18dd08233af85de9fdb5a8f85c5c00d3"
             }
           ]
         },
@@ -132,19 +132,6 @@
               "target": "f7",
               "type": "update_tgz",
               "sha256": "44fc83f3f530e91c7bde0367ccfc5ca096968d363c7d74ddf121f44504d4083f"
-            }
-          ]
-        },
-        {
-          "version": "nkt-016",
-          "changelog": "Nikita firmware nkt-016.",
-          "timestamp": 1789849291,
-          "files": [
-            {
-              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-016/flipper-z-f7-update-nkt-016.tgz",
-              "target": "f7",
-              "type": "update_tgz",
-              "sha256": "7024236f5fa1087e6e36438a6f044cafd66f70a4582b218422550c15cdfe9117"
             }
           ]
         }
