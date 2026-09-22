@@ -7,14 +7,14 @@
       "versions": [
         {
           "version": "nkt-030",
-          "changelog": "Nikita firmware nkt-030. WIFI command mailbox (bridge-free: write /ext/apps_data/nikita_wifi/cmd, read last.log), snapshot logging (reads never hang), crash-hardened. Verified: 58 APs via mailbox, no crash. Authorised testing only.",
-          "timestamp": 1790083859,
+          "changelog": "Nikita firmware nkt-030.",
+          "timestamp": 1790083726,
           "files": [
             {
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-030/flipper-z-f7-update-nkt-030.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "97bee7ddce3f634d3c8eb09154a2206aac55f46ebba933658c8db954344e34e4"
+              "sha256": "f19a26276193513f0fe60a82120b17171343fbdf74f69ff615b5f8ba7d937c05"
             }
           ]
         },
@@ -132,19 +132,6 @@
               "target": "f7",
               "type": "update_tgz",
               "sha256": "e0b2ac1f9548800d68139a9d36b6920d00a5d77c51d143c9e19bc9df374894f8"
-            }
-          ]
-        },
-        {
-          "version": "nkt-017",
-          "changelog": "Nikita firmware nkt-017.",
-          "timestamp": 1789986167,
-          "files": [
-            {
-              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-017/flipper-z-f7-update-nkt-017.tgz",
-              "target": "f7",
-              "type": "update_tgz",
-              "sha256": "44fc83f3f530e91c7bde0367ccfc5ca096968d363c7d74ddf121f44504d4083f"
             }
           ]
         }
