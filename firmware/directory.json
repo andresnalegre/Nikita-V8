@@ -7,14 +7,14 @@
       "versions": [
         {
           "version": "nkt-025",
-          "changelog": "Nikita firmware nkt-025. WIFI in the MAIN MENU (wifi icon). WIFI app now full ESP32 Marauder parity: 35 categories -- scan/recon/list/select, attacks + BLE spam, beacon, targeted, port scan, full sniff set (PMKID/pwn/BT/airtag...), fox hunt, evil portal, wardrive, GPS, channel, LED, settings, keyboard args. Authorised testing only.",
-          "timestamp": 1790064056,
+          "changelog": "Nikita firmware nkt-025.",
+          "timestamp": 1790020991,
           "files": [
             {
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-025/flipper-z-f7-update-nkt-025.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "ae12aa40841ac207eef86468574082dbc89fbb281ad6ada77424be9188b1fa4b"
+              "sha256": "f38956603a61841d8a04f5b96393df7689a641dc24c07d50153971d7d6e9a5c9"
             }
           ]
         },
@@ -132,19 +132,6 @@
               "target": "f7",
               "type": "update_tgz",
               "sha256": "27e12182dee6fd1eac2ae2387b334e0c7a2a619a7cd8474f561ab07daa0d915c"
-            }
-          ]
-        },
-        {
-          "version": "nkt-014",
-          "changelog": "Nikita firmware nkt-014.",
-          "timestamp": 1789679059,
-          "files": [
-            {
-              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-014/flipper-z-f7-update-nkt-014.tgz",
-              "target": "f7",
-              "type": "update_tgz",
-              "sha256": "0e77734ce797640bc359f8d332695a6cd220614bbe8897948de78934f12cf349"
             }
           ]
         }
