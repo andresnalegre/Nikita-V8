@@ -7,10 +7,10 @@ App(
     stack_size=4 * 1024,
     icon="A_WIFI_14",
     order=45,
-    fap_version="1.1",
+    fap_version="2.0",
     fap_icon="icons/wifi_10px.png",
     fap_category="GPIO",
-    fap_description="Nikita's WiFi. Opens the full ESP32 Marauder if installed, else drives the board over the GPIO UART: scan/sniff/deauth/beacon/channel. Authorised testing only.",
+    fap_description="WIFI -- full ESP32 Marauder control over the GPIO UART: scan/recon/list/select, attacks, beacon spam, targeted, port scan, sniff (incl PMKID/pwn/BT), fox hunt, evil portal, wardrive, GPS, channel, LED, settings. Authorised testing only.",
     fap_author="Nikita",
     sources=["nikita_wifi.c"],
 )
