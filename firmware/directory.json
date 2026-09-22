@@ -7,14 +7,14 @@
       "versions": [
         {
           "version": "nkt-026",
-          "changelog": "Nikita firmware nkt-026. WIFI app two-level menu -- pick a category and see EVERY option (all attacks, all sniffs, BLE spam). Board output teed to /ext/apps_data/nikita_wifi/last.log. New built-in marauder CLI command: run any Marauder command over the Flipper shell and get output back (Nikita end-to-end WiFi). Authorised testing only.",
-          "timestamp": 1790067601,
+          "changelog": "Nikita firmware nkt-026.",
+          "timestamp": 1790067320,
           "files": [
             {
               "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-026/flipper-z-f7-update-nkt-026.tgz",
               "target": "f7",
               "type": "update_tgz",
-              "sha256": "ff987e7d68500672a009ba9e6ae935d22c9d20b3d7ca00e589ebfc892d398196"
+              "sha256": "a5ef076f3514072e6e61dc414d0f750184c39ece0ebdd808de3b81cf8832d1eb"
             }
           ]
         },
@@ -132,19 +132,6 @@
               "target": "f7",
               "type": "update_tgz",
               "sha256": "7024236f5fa1087e6e36438a6f044cafd66f70a4582b218422550c15cdfe9117"
-            }
-          ]
-        },
-        {
-          "version": "nkt-015",
-          "changelog": "Nikita firmware nkt-015. Nikita Buddy loads quick commands from the synced /ext/nikita/extras.json (cross-client sync across iPhone, qFlipper and firmware).",
-          "timestamp": 1789764751,
-          "files": [
-            {
-              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-015/flipper-z-f7-update-nkt-015.tgz",
-              "target": "f7",
-              "type": "update_tgz",
-              "sha256": "27e12182dee6fd1eac2ae2387b334e0c7a2a619a7cd8474f561ab07daa0d915c"
             }
           ]
         }
