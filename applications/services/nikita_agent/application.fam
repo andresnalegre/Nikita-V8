@@ -1,0 +1,7 @@
+App(
+    appid="nikita_agent",
+    apptype=FlipperAppType.STARTUP,
+    entry_point="nikita_agent_on_system_start",
+    requires=["cli"],
+    order=1320,
+)

@@ -15,5 +15,6 @@ App(
         "power",
         "namechanger_srv",
         "nikita_wifi_cli",
+        "nikita_agent",
     ],
 )
