@@ -6,6 +6,19 @@
       "description": "Stable Nikita firmware. Recommended.",
       "versions": [
         {
+          "version": "nkt-031",
+          "changelog": "Nikita firmware nkt-031. Nikita Agent Service (headless control plane): mailbox /ext/nikita/agent/req->res (bridge-free) + nagent CLI; core sys.* ops. Foundation for programmable control of every Flipper subsystem.",
+          "timestamp": 1790091911,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-031/flipper-z-f7-update-nkt-031.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "0576d7b7b0ce1174180822ae00e8b289570a03fd03d1e945e435faa0a1d11ce4"
+            }
+          ]
+        },
+        {
           "version": "nkt-030",
           "changelog": "Nikita firmware nkt-030.",
           "timestamp": 1790083726,
@@ -143,6 +156,19 @@
       "description": "Nikita firmware under test before it becomes a release.",
       "versions": [
         {
+          "version": "nkt-031",
+          "changelog": "Nikita firmware nkt-031. Nikita Agent Service (headless control plane): mailbox /ext/nikita/agent/req->res (bridge-free) + nagent CLI; core sys.* ops. Foundation for programmable control of every Flipper subsystem.",
+          "timestamp": 1790091911,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-031/flipper-z-f7-update-nkt-031.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "0576d7b7b0ce1174180822ae00e8b289570a03fd03d1e945e435faa0a1d11ce4"
+            }
+          ]
+        },
+        {
           "version": "nkt-030",
           "changelog": "Nikita firmware nkt-030. WIFI command mailbox (bridge-free: write /ext/apps_data/nikita_wifi/cmd, read last.log), snapshot logging (reads never hang), crash-hardened. Verified: 58 APs via mailbox, no crash. Authorised testing only.",
           "timestamp": 1790083859,
@@ -214,6 +240,19 @@
       "title": "Development",
       "description": "Nikita firmware built from the tip. Expect bugs.",
       "versions": [
+        {
+          "version": "nkt-031",
+          "changelog": "Nikita firmware nkt-031. Nikita Agent Service (headless control plane): mailbox /ext/nikita/agent/req->res (bridge-free) + nagent CLI; core sys.* ops. Foundation for programmable control of every Flipper subsystem.",
+          "timestamp": 1790091911,
+          "files": [
+            {
+              "url": "https://github.com/andresnalegre/Nikita-V8/releases/download/nkt-031/flipper-z-f7-update-nkt-031.tgz",
+              "target": "f7",
+              "type": "update_tgz",
+              "sha256": "0576d7b7b0ce1174180822ae00e8b289570a03fd03d1e945e435faa0a1d11ce4"
+            }
+          ]
+        },
         {
           "version": "nkt-030",
           "changelog": "Nikita firmware nkt-030. WIFI command mailbox (bridge-free: write /ext/apps_data/nikita_wifi/cmd, read last.log), snapshot logging (reads never hang), crash-hardened. Verified: 58 APs via mailbox, no crash. Authorised testing only.",
