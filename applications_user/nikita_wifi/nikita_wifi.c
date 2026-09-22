@@ -23,10 +23,15 @@
 // can read_file it, analyse it and format results -- not just watch the screen.
 #define WIFI_LOG_DIR "/ext/apps_data/nikita_wifi"
 #define WIFI_LOG_PATH WIFI_LOG_DIR "/last.log"
+// Command mailbox: any client that can write the Flipper SD (Nikita over BLE
+// with no bridge, or qFlipper over USB) drops a Marauder command here, one per
+// line. While the WIFI app is open it runs them on the board and the output
+// lands in last.log -- full end-to-end WiFi with nothing but a file write.
+#define WIFI_CMD_PATH WIFI_LOG_DIR "/cmd"
 
 #define WIFI_BAUD 115200
 #define WIFI_OUT_MAX 4096
-#define WIFI_RX_STREAM 1024
+#define WIFI_RX_STREAM 4096
 #define WIFI_MAX_OPT 18
 #define WIFI_INPUT_MAX 80
 
@@ -191,8 +196,10 @@ typedef struct {
     FuriHalSerialHandle* serial;
     Expansion* expansion;
     Storage* storage;
-    File* log;
     WifiView current;
+    bool dirty; // out changed since last snapshot
+    uint8_t snap_tick; // throttles the SD snapshot
+    uint8_t cmd_tick; // throttles the command-mailbox poll
     uint32_t cat_index; // category currently open
     uint32_t pending_cat; // category+option awaiting keyboard input
     uint32_t pending_opt;
@@ -219,23 +226,28 @@ static void wifi_send(NikitaWifi* app, const char* cmd) {
     furi_hal_serial_tx(app->serial, (const uint8_t*)"\n", 1);
 }
 
-// Append to the SD log (best-effort; the app works fine if the card is absent).
-static void wifi_log(NikitaWifi* app, const char* s, size_t n) {
-    if(app->log && n) {
-        storage_file_write(app->log, s, n);
-        storage_file_sync(app->log); // flush so a reader over BLE sees it live
-    }
-}
-
-static void wifi_out_append(NikitaWifi* app, const char* data) {
-    wifi_log(app, data, strlen(data));
+// Append text to the rolling in-RAM window (capped). No file I/O here -- the
+// snapshot writes it out on a slow timer.
+static void wifi_out_append(NikitaWifi* app, const char* data, size_t len) {
+    UNUSED(len);
     furi_string_cat_str(app->out, data);
     size_t n = furi_string_size(app->out);
     if(n > WIFI_OUT_MAX) {
         furi_string_right(app->out, n - WIFI_OUT_MAX);
     }
-    text_box_set_text(app->text_box, furi_string_get_cstr(app->out));
-    text_box_set_focus(app->text_box, TextBoxFocusEnd);
+}
+
+// Write the current window to last.log with a quick open/write/close. We never
+// hold the file open, so a reader (Nikita over BLE/USB) can always open it --
+// keeping it open for write is what made her read_file hang.
+static void wifi_snapshot(NikitaWifi* app) {
+    if(!app->storage) return;
+    File* f = storage_file_alloc(app->storage);
+    if(storage_file_open(f, WIFI_LOG_PATH, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
+        storage_file_write(f, furi_string_get_cstr(app->out), furi_string_size(app->out));
+        storage_file_close(f);
+    }
+    storage_file_free(f);
 }
 
 static void wifi_pump_timer(void* context) {
@@ -243,14 +255,76 @@ static void wifi_pump_timer(void* context) {
     view_dispatcher_send_custom_event(app->view_dispatcher, WifiEventPump);
 }
 
+// Command mailbox: if a client dropped commands in WIFI_CMD_PATH, run each line
+// on the board (output flows to last.log via the RX pump) then consume the file.
+static void wifi_check_cmd(NikitaWifi* app) {
+    if(!app->storage || !app->serial) return;
+    File* f = storage_file_alloc(app->storage);
+    char data[512];
+    size_t n = 0;
+    if(storage_file_open(f, WIFI_CMD_PATH, FSAM_READ, FSOM_OPEN_EXISTING)) {
+        n = storage_file_read(f, data, sizeof(data) - 1);
+        storage_file_close(f);
+    }
+    storage_file_free(f);
+    if(n == 0) return;
+    data[n] = '\0';
+    storage_common_remove(app->storage, WIFI_CMD_PATH); // consume it
+
+    // Send each non-empty line to the board.
+    char* line = data;
+    while(line && *line) {
+        char* nl = strchr(line, '\n');
+        if(nl) *nl = '\0';
+        // trim trailing CR
+        size_t l = strlen(line);
+        if(l && line[l - 1] == '\r') line[l - 1] = '\0';
+        if(line[0] != '\0') {
+            furi_string_cat_printf(app->out, "\n=== mailbox: %s ===\n", line);
+            size_t sz = furi_string_size(app->out);
+            if(sz > WIFI_OUT_MAX) furi_string_right(app->out, sz - WIFI_OUT_MAX);
+            wifi_send(app, line);
+        }
+        line = nl ? nl + 1 : NULL;
+    }
+    wifi_snapshot(app); // record the command(s) immediately
+}
+
 static bool wifi_custom_event(void* context, uint32_t event) {
     NikitaWifi* app = context;
     if(event != WifiEventPump) return false;
-    char buf[129];
-    size_t got = furi_stream_buffer_receive(app->rx_stream, buf, sizeof(buf) - 1, 0);
-    if(got > 0) {
+
+    // Drain the WHOLE stream buffer this tick (a scan floods far faster than a
+    // single 128-byte read could keep up with). Accumulate to out+log here, then
+    // sync the file and redraw the text box ONCE below -- doing either per chunk
+    // hangs the device under load.
+    char buf[257];
+    size_t total = 0;
+    for(;;) {
+        size_t got = furi_stream_buffer_receive(app->rx_stream, buf, sizeof(buf) - 1, 0);
+        if(!got) break;
         buf[got] = '\0';
-        wifi_out_append(app, buf);
+        wifi_out_append(app, buf, got);
+        total += got;
+        if(total >= 8192) break; // bound work per tick; the rest comes next tick
+    }
+    if(total) {
+        text_box_set_text(app->text_box, furi_string_get_cstr(app->out));
+        text_box_set_focus(app->text_box, TextBoxFocusEnd);
+        app->dirty = true;
+    }
+    // Snapshot to SD ~every 1s when there's fresh output, so a reader always
+    // finds a recent, CLOSED last.log.
+    if(app->dirty && ++app->snap_tick >= 10) {
+        app->snap_tick = 0;
+        app->dirty = false;
+        wifi_snapshot(app);
+    }
+
+    // Poll the command mailbox ~every 500ms (pump fires at 100ms).
+    if(++app->cmd_tick >= 5) {
+        app->cmd_tick = 0;
+        wifi_check_cmd(app);
     }
     return true;
 }
@@ -268,11 +342,8 @@ static void wifi_run(NikitaWifi* app, const char* label, const char* cmd) {
     furi_string_printf(app->out, "> %s\n", label);
     text_box_set_text(app->text_box, furi_string_get_cstr(app->out));
     text_box_set_focus(app->text_box, TextBoxFocusEnd);
-    // Mark the command in the log so Nikita can segment the session's output.
-    char hdr[80];
-    int hn = snprintf(hdr, sizeof(hdr), "\n=== %s : %s ===\n", label, cmd);
-    if(hn > 0) wifi_log(app, hdr, (size_t)hn);
     wifi_send(app, cmd);
+    wifi_snapshot(app); // fresh log for this command
     wifi_switch(app, WifiViewOutput);
 }
 
@@ -419,15 +490,12 @@ static NikitaWifi* nikita_wifi_alloc(void) {
         furi_hal_serial_async_rx_start(app->serial, wifi_rx_cb, app, false);
     }
 
-    // Fresh session log on the Flipper SD for Nikita to read/analyse later.
+    // Storage for the snapshot log + command mailbox (never held open).
     app->storage = furi_record_open(RECORD_STORAGE);
     storage_common_mkdir(app->storage, "/ext/apps_data");
     storage_common_mkdir(app->storage, WIFI_LOG_DIR);
-    app->log = storage_file_alloc(app->storage);
-    if(!storage_file_open(app->log, WIFI_LOG_PATH, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
-        storage_file_free(app->log);
-        app->log = NULL;
-    }
+    storage_common_remove(app->storage, WIFI_CMD_PATH); // clear any stale command
+    wifi_snapshot(app); // start with an empty last.log
 
     app->pump = furi_timer_alloc(wifi_pump_timer, FuriTimerTypePeriodic, app);
     furi_timer_start(app->pump, furi_ms_to_ticks(100));
@@ -455,10 +523,6 @@ static void nikita_wifi_free(NikitaWifi* app) {
         furi_record_close(RECORD_EXPANSION);
     }
 
-    if(app->log) {
-        storage_file_close(app->log);
-        storage_file_free(app->log);
-    }
     furi_record_close(RECORD_STORAGE);
 
     view_dispatcher_remove_view(app->view_dispatcher, WifiViewCats);
