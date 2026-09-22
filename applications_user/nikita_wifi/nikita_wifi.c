@@ -12,7 +12,7 @@
 #include <furi_hal_serial_control.h>
 #include <gui/gui.h>
 #include <gui/view_dispatcher.h>
-#include <gui/modules/variable_item_list.h>
+#include <gui/modules/submenu.h>
 #include <gui/modules/text_box.h>
 #include <gui/modules/text_input.h>
 #include <storage/storage.h>
@@ -167,19 +167,19 @@ static const WifiItem k_items[] = {
 #define WIFI_ITEM_COUNT (sizeof(k_items) / sizeof(k_items[0]))
 
 typedef enum {
-    WifiViewMenu,
-    WifiViewInput,
-    WifiViewOutput,
+    WifiViewCats, // top: the categories
+    WifiViewOpts, // the full list of options inside a category (every attack, etc.)
+    WifiViewInput, // keyboard for commands that take an argument
+    WifiViewOutput, // the board's console output
 } WifiView;
 
 typedef struct {
     Gui* gui;
     ViewDispatcher* view_dispatcher;
-    VariableItemList* menu;
+    Submenu* cats; // category list
+    Submenu* opts; // option list for the current category
     TextInput* text_input;
     TextBox* text_box;
-    VariableItem* vi[WIFI_ITEM_COUNT];
-    uint8_t sel[WIFI_ITEM_COUNT]; // selected option per row
     FuriString* out;
     FuriStreamBuffer* rx_stream;
     FuriTimer* pump;
@@ -187,7 +187,9 @@ typedef struct {
     Storage* storage;
     File* log;
     WifiView current;
-    uint32_t pending_index; // row awaiting keyboard input
+    uint32_t cat_index; // category currently open
+    uint32_t pending_cat; // category+option awaiting keyboard input
+    uint32_t pending_opt;
     char input_buf[WIFI_INPUT_MAX];
 } NikitaWifi;
 
@@ -268,47 +270,20 @@ static void wifi_run(NikitaWifi* app, const char* label, const char* cmd) {
     wifi_switch(app, WifiViewOutput);
 }
 
-// Keyboard finished: append the typed argument to the pending command.
-static void wifi_input_done(void* context) {
-    NikitaWifi* app = context;
-    const WifiItem* item = &k_items[app->pending_index];
-    uint8_t opt = app->sel[app->pending_index];
-    char cmd[160];
-    if(app->input_buf[0] != '\0') {
-        snprintf(cmd, sizeof(cmd), "%s %s", item->commands[opt], app->input_buf);
-    } else {
-        snprintf(cmd, sizeof(cmd), "%s", item->commands[opt]);
-    }
-    char label[48];
-    snprintf(label, sizeof(label), "%s %s", item->name, item->options[opt]);
-    wifi_run(app, label, cmd);
-}
+static void wifi_input_done(void* context); // keyboard result -> run the command
 
-// A row was scrolled: remember which option is selected and show its label.
-static void wifi_item_change(VariableItem* vitem) {
-    NikitaWifi* app = variable_item_get_context(vitem);
-    for(size_t i = 0; i < WIFI_ITEM_COUNT; i++) {
-        if(app->vi[i] == vitem) {
-            uint8_t idx = variable_item_get_current_value_index(vitem);
-            app->sel[i] = idx;
-            variable_item_set_current_value_text(vitem, k_items[i].options[idx]);
-            break;
-        }
-    }
-}
-
-// OK on a row: run it, or open the keyboard first if it takes an argument.
-static void wifi_item_enter(void* context, uint32_t index) {
-    NikitaWifi* app = context;
-    if(index >= WIFI_ITEM_COUNT) return;
-    const WifiItem* item = &k_items[index];
-    uint8_t opt = app->sel[index];
+// Run category c option o, opening the keyboard first if it takes an argument.
+static void wifi_execute(NikitaWifi* app, uint32_t c, uint32_t o) {
+    const WifiItem* item = &k_items[c];
+    char label[56];
+    snprintf(label, sizeof(label), "%s: %s", item->name, item->options[o]);
 
     if(item->args == ArgInput) {
-        app->pending_index = index;
+        app->pending_cat = c;
+        app->pending_opt = o;
         app->input_buf[0] = '\0';
-        char hdr[64];
-        snprintf(hdr, sizeof(hdr), "%s %s  (args, optional)", item->name, item->options[opt]);
+        char hdr[96];
+        snprintf(hdr, sizeof(hdr), "%s  (args, optional)", label);
         text_input_reset(app->text_input);
         text_input_set_header_text(app->text_input, hdr);
         text_input_set_result_callback(
@@ -316,37 +291,79 @@ static void wifi_item_enter(void* context, uint32_t index) {
         wifi_switch(app, WifiViewInput);
         return;
     }
+    wifi_run(app, label, item->commands[o]);
+}
 
-    char label[48];
-    snprintf(label, sizeof(label), "%s %s", item->name, item->options[opt]);
-    wifi_run(app, label, item->commands[opt]);
+// Keyboard finished: append the typed argument to the pending command.
+static void wifi_input_done(void* context) {
+    NikitaWifi* app = context;
+    const WifiItem* item = &k_items[app->pending_cat];
+    uint32_t o = app->pending_opt;
+    char cmd[160];
+    char label[56];
+    snprintf(label, sizeof(label), "%s: %s", item->name, item->options[o]);
+    if(app->input_buf[0] != '\0') {
+        snprintf(cmd, sizeof(cmd), "%s %s", item->commands[o], app->input_buf);
+    } else {
+        snprintf(cmd, sizeof(cmd), "%s", item->commands[o]);
+    }
+    wifi_run(app, label, cmd);
+}
+
+// An option was chosen inside a category.
+static void wifi_opt_cb(void* context, uint32_t index) {
+    NikitaWifi* app = context;
+    wifi_execute(app, app->cat_index, index);
+}
+
+// Build the option list for a category -- shows EVERY option (all attacks, etc).
+static void wifi_build_opts(NikitaWifi* app, uint32_t c) {
+    submenu_reset(app->opts);
+    submenu_set_header(app->opts, k_items[c].name);
+    for(uint32_t o = 0; o < k_items[c].num_options; o++) {
+        submenu_add_item(app->opts, k_items[c].options[o], o, wifi_opt_cb, app);
+    }
+}
+
+// A category was chosen: single-option categories run straight away, the rest
+// open a list of every option so nothing is hidden behind a scroll.
+static void wifi_cat_cb(void* context, uint32_t index) {
+    NikitaWifi* app = context;
+    if(index >= WIFI_ITEM_COUNT) return;
+    if(k_items[index].num_options <= 1) {
+        wifi_execute(app, index, 0);
+        return;
+    }
+    app->cat_index = index;
+    wifi_build_opts(app, index);
+    wifi_switch(app, WifiViewOpts);
 }
 
 static bool wifi_back_cb(void* context) {
     NikitaWifi* app = context;
     if(app->current == WifiViewOutput) {
         wifi_send(app, "stopscan"); // leaving a running action stops it
-        wifi_switch(app, WifiViewMenu);
+        // back to wherever we launched from: the option list if it had one
+        wifi_switch(app, k_items[app->cat_index].num_options > 1 ? WifiViewOpts : WifiViewCats);
         return true;
     }
     if(app->current == WifiViewInput) {
-        wifi_switch(app, WifiViewMenu);
+        wifi_switch(app, k_items[app->pending_cat].num_options > 1 ? WifiViewOpts : WifiViewCats);
         return true;
     }
-    return false; // from the menu -> exit
+    if(app->current == WifiViewOpts) {
+        wifi_switch(app, WifiViewCats);
+        return true;
+    }
+    return false; // from the category list -> exit
 }
 
-static void wifi_build_menu(NikitaWifi* app) {
-    variable_item_list_reset(app->menu);
-    for(size_t i = 0; i < WIFI_ITEM_COUNT; i++) {
-        VariableItem* vi = variable_item_list_add(
-            app->menu, k_items[i].name, k_items[i].num_options, wifi_item_change, app);
-        variable_item_set_current_value_index(vi, 0);
-        variable_item_set_current_value_text(vi, k_items[i].options[0]);
-        app->vi[i] = vi;
-        app->sel[i] = 0;
+static void wifi_build_cats(NikitaWifi* app) {
+    submenu_reset(app->cats);
+    submenu_set_header(app->cats, "WIFI");
+    for(uint32_t c = 0; c < WIFI_ITEM_COUNT; c++) {
+        submenu_add_item(app->cats, k_items[c].name, c, wifi_cat_cb, app);
     }
-    variable_item_list_set_enter_callback(app->menu, wifi_item_enter, app);
 }
 
 // ---- lifecycle ------------------------------------------------------------
@@ -364,10 +381,14 @@ static NikitaWifi* nikita_wifi_alloc(void) {
     view_dispatcher_set_custom_event_callback(app->view_dispatcher, wifi_custom_event);
     view_dispatcher_set_navigation_event_callback(app->view_dispatcher, wifi_back_cb);
 
-    app->menu = variable_item_list_alloc();
-    wifi_build_menu(app);
+    app->cats = submenu_alloc();
+    wifi_build_cats(app);
     view_dispatcher_add_view(
-        app->view_dispatcher, WifiViewMenu, variable_item_list_get_view(app->menu));
+        app->view_dispatcher, WifiViewCats, submenu_get_view(app->cats));
+
+    app->opts = submenu_alloc();
+    view_dispatcher_add_view(
+        app->view_dispatcher, WifiViewOpts, submenu_get_view(app->opts));
 
     app->text_input = text_input_alloc();
     view_dispatcher_add_view(
@@ -418,10 +439,12 @@ static void nikita_wifi_free(NikitaWifi* app) {
     }
     furi_record_close(RECORD_STORAGE);
 
-    view_dispatcher_remove_view(app->view_dispatcher, WifiViewMenu);
+    view_dispatcher_remove_view(app->view_dispatcher, WifiViewCats);
+    view_dispatcher_remove_view(app->view_dispatcher, WifiViewOpts);
     view_dispatcher_remove_view(app->view_dispatcher, WifiViewInput);
     view_dispatcher_remove_view(app->view_dispatcher, WifiViewOutput);
-    variable_item_list_free(app->menu);
+    submenu_free(app->cats);
+    submenu_free(app->opts);
     text_input_free(app->text_input);
     text_box_free(app->text_box);
     view_dispatcher_free(app->view_dispatcher);
@@ -435,7 +458,7 @@ static void nikita_wifi_free(NikitaWifi* app) {
 int32_t nikita_wifi_app(void* p) {
     UNUSED(p);
     NikitaWifi* app = nikita_wifi_alloc();
-    wifi_switch(app, WifiViewMenu);
+    wifi_switch(app, WifiViewCats);
     view_dispatcher_run(app->view_dispatcher);
     nikita_wifi_free(app);
     return 0;
