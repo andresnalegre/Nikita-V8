@@ -147,8 +147,9 @@ BleEventFlowStatus ble_event_app_notification(void* pckt) {
         gap->negotiation_round = 0;
         // Enterprise sleep
         furi_delay_us(666 + 666);
-        if(gap->enable_adv && gap->connection_count < CFG_BLE_NUM_LINK) {
-            // Restart advertising so the freed slot can be filled again
+        if(gap->enable_adv && gap->connection_count == 0) {
+            // Only one BLE link at a time on this stack; when it drops, resume
+            // normal idle advertising (with the low-power timer) exactly like stock.
             gap_advertise_start(GapStateAdvFast);
         }
         GapEvent event = {
@@ -201,14 +202,17 @@ BleEventFlowStatus ble_event_app_notification(void* pckt) {
             gap->service.connection_handle = event->Connection_Handle;
             if(gap->connection_count < CFG_BLE_NUM_LINK) gap->connection_count++;
 
-            // DUAL-LINK: keep advertising for a second client until we hit the
-            // stack's max links; only then stop. This is what lets iOS AND
-            // qFlipper both connect over BLE at the same time.
-            if(gap->enable_adv && gap->connection_count < CFG_BLE_NUM_LINK) {
-                gap_advertise_start(GapStateAdvFast);
-            } else {
-                furi_timer_stop(gap->advertise_timer);
-            }
+            // HARD LIMIT (verified twice on hardware): this Flipper's "light" BLE
+            // radio stack (type 3) does NOT tolerate advertising while a
+            // connection is active -- issuing aci_gap_set_discoverable mid-
+            // connection drops the link within seconds. A 2nd simultaneous BLE
+            // client would need advertising-while-connected, which needs a
+            // different radio stack (core2 -- not touched). So we do the safe,
+            // stock thing: stop advertising on connect. One BLE link at a time.
+            // For more channels: USB (one cabled computer) works CONCURRENTLY
+            // with the one BLE link, and bridge.py's WiFi/WebSocket mode fans one
+            // USB-hosted bridge out to many machines over the network.
+            furi_timer_stop(gap->advertise_timer);
 
             gap_verify_connection_parameters(gap);
 
