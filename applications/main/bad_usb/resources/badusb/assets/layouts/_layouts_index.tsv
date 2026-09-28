@@ -1,0 +1,70 @@
+file	name	kbid
+albania.kl	Albania	kbdal
+belgian.kl	Belgian	kbdbe
+brazilian.kl	Brazilian	kbdbr
+canadian-french.kl	Canadian French	kbdfc
+canadian-multilingual-standard.kl	Canadian Multilingual Standard	kbdcan
+canadian-multilingual.kl	Canadian Multilingual	kbdca
+cherokee-nation.kl	Cherokee Nation	kbdcher
+cherokee-phonetic.kl	Cherokee Phonetic	kbdcherp
+colemak-2.kl	Colemak	kbdcmk
+croatian-slovenian.kl	Croatian/Slovenian	kbdcr
+czech-extended-chess.kl	Czech Extended Chess	kbdczsh
+czech-programmer-x27-s.kl	Czech_Programmer&#x27;s	kbdcz2
+czech.kl	Czech	kbdcz
+danish.kl	Danish	kbdda
+dutch.kl	Dutch	kbdne
+dvorak-left-hand-us-english.kl	Dvorak Left-Hand US English	kbdusl
+dvorak-right-hand-us-english.kl	Dvorak Right-Hand US English	kbdusr
+dvorak-us-english.kl	Dvorak US English	kbddv
+finnish.kl	Finnish	kbdfi
+french-2.kl	French (Standard, AZERTY)	kbdfrna
+french-3.kl	French (Standard, BÃ‰PO)	kbdfrnb
+french.kl	French	kbdfr
+german-extended-xx-jubil-um-copilot-rema.kl	German Extended XX Jubiläum - Copilot Remap	kbdgrx2j
+german-extended.kl	German Extended (E2)	kbdgre2
+german-international.kl	German International	kbdgrix
+german-unz-1-fraktur-t.kl	German UNZ 1 - Fraktur T	kbdunz1t
+greek-ibm-220-latin.kl	Greek IBM 220 Latin	kbdhela2
+greek-ibm-319-latin.kl	Greek IBM 319 Latin	kbdhela3
+greek-latin.kl	Greek_Latin	kbdgkl
+guarani.kl	Guarani	kbdgn
+hawaiian.kl	Hawaiian	kbdhaw
+hungarian-101-key.kl	Hungarian 101-key	kbdhu1
+hungarian.kl	Hungarian	kbdhu
+inuktitut-latin.kl	Inuktitut Latin	kbdiulat
+inuktitut-naqittaut.kl	Inuktitut Naqittaut	kbdinuk2
+inuktitut-nattilik.kl	Inuktitut - Nattilik	kbdinuk3
+irish.kl	Irish	kbdir
+italian.kl	Italian	kbdit
+jp-japanese-nec-pc-9800.kl	JP Japanese NEC PC-9800	kbdnecnt
+latin-american-spanish.kl	Latin-American Spanish	kbdla
+latvia.kl	Latvia	kbdlv
+latvian.kl	Latvian (Standard)	kbdlvst
+lithuanian-standard.kl	Lithuanian Standard	kbdlt2
+maltese-48-key.kl	Maltese 48-key	kbdmlt48
+maori.kl	Maori	kbdmaori
+myanmar.kl	Myanmar	kbdmyan
+norwegian.kl	Norwegian	kbdno
+polish.kl	Polish	kbdpl
+portugu-s-2.kl	Português (HCESAR)	kbdhc
+portugu-s-3.kl	Português (Nativo)	kbdnt
+portugu-s.kl	Português (CAMOES)	kbdcm
+portuguese.kl	Portuguese	kbdpo
+romanian.kl	Romanian (Standard)	kbdrost
+sami-extended-finland-sweden.kl	Sami Extended Finland-Sweden	kbdsmsfi
+sami-extended-norway.kl	Sami Extended Norway	kbdsmsno
+sinhala-wij-9.kl	Sinhala - Wij 9	kbdsw09
+slovak-2.kl	Slovak(QWERTY)	kbdsl1
+slovak.kl	Slovak	kbdsl
+sorbian-extended.kl	Sorbian Extended	kbdsorex
+spanish-alernate.kl	Spanish Alernate	kbdes
+swiss-french.kl	Swiss French	kbdsf
+turkish-f.kl	Turkish F	kbdtuf
+turkish-q.kl	Turkish Q	kbdtuq
+united-kingdom-extended.kl	United Kingdom Extended	kbdukx
+united-kingdom.kl	United Kingdom	kbduk
+us-ibm-arabic-238-l.kl	US IBM Arabic 238_L	kbdusa
+vietnamese.kl	Vietnamese	kbdvntc
+wolof.kl	Wolof	kbdwol
+yoruba.kl	Yoruba	kbdyba
