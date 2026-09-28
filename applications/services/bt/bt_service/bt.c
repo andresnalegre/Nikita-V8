@@ -182,6 +182,16 @@ Bt* bt_alloc(void) {
     // RPC
     bt->rpc = furi_record_open(RECORD_RPC);
     bt->rpc_event = furi_event_flag_alloc();
+    // Dual-link peers: one RPC session per BLE connection. Each gets its own
+    // ack/send event flag up front so a connect never has to allocate on the
+    // GAP thread.
+    for(uint8_t i = 0; i < BT_PEERS_MAX; i++) {
+        bt->peers[i].bt = bt;
+        bt->peers[i].used = false;
+        bt->peers[i].conn_handle = 0;
+        bt->peers[i].rpc_session = NULL;
+        bt->peers[i].rpc_event = furi_event_flag_alloc();
+    }
 
     // API evnent
     bt->api_event = furi_event_flag_alloc();
@@ -191,22 +201,56 @@ Bt* bt_alloc(void) {
     return bt;
 }
 
-// Called from GAP thread from Serial service
+// ---- Dual-link peer helpers ----------------------------------------------
+
+static BtPeer* bt_peer_by_handle(Bt* bt, uint16_t conn_handle) {
+    for(uint8_t i = 0; i < BT_PEERS_MAX; i++) {
+        if(bt->peers[i].used && bt->peers[i].conn_handle == conn_handle) return &bt->peers[i];
+    }
+    return NULL;
+}
+
+static BtPeer* bt_peer_alloc_slot(Bt* bt, uint16_t conn_handle) {
+    for(uint8_t i = 0; i < BT_PEERS_MAX; i++) {
+        if(!bt->peers[i].used) {
+            bt->peers[i].used = true;
+            bt->peers[i].conn_handle = conn_handle;
+            return &bt->peers[i];
+        }
+    }
+    return NULL;
+}
+
+static uint8_t bt_active_peer_count(Bt* bt) {
+    uint8_t n = 0;
+    for(uint8_t i = 0; i < BT_PEERS_MAX; i++)
+        if(bt->peers[i].used) n++;
+    return n;
+}
+
+// Called from GAP thread from Serial service. Context is the PEER for the BLE
+// connection the event belongs to (routed by connection handle in the service).
 static uint16_t bt_serial_event_callback(SerialServiceEvent event, void* context) {
     furi_assert(context);
-    Bt* bt = context;
+    BtPeer* peer = context;
+    Bt* bt = peer->bt;
     uint16_t ret = 0;
 
     if(event.event == SerialServiceEventTypeDataReceived) {
-        size_t bytes_processed =
-            rpc_session_feed(bt->rpc_session, event.data.buffer, event.data.size, 1000);
-        if(bytes_processed != event.data.size) {
-            FURI_LOG_E(
-                TAG, "Only %zu of %u bytes processed by RPC", bytes_processed, event.data.size);
+        if(peer->rpc_session) {
+            size_t bytes_processed =
+                rpc_session_feed(peer->rpc_session, event.data.buffer, event.data.size, 1000);
+            if(bytes_processed != event.data.size) {
+                FURI_LOG_E(
+                    TAG,
+                    "Only %zu of %u bytes processed by RPC",
+                    bytes_processed,
+                    event.data.size);
+            }
+            ret = rpc_session_get_available_size(peer->rpc_session);
         }
-        ret = rpc_session_get_available_size(bt->rpc_session);
     } else if(event.event == SerialServiceEventTypeDataSent) {
-        furi_event_flag_set(bt->rpc_event, BT_RPC_EVENT_BUFF_SENT);
+        furi_event_flag_set(peer->rpc_event, BT_RPC_EVENT_BUFF_SENT);
     } else if(event.event == SerialServiceEventTypesBleResetRequest) {
         FURI_LOG_I(TAG, "BLE restart request received");
         BtMessage message = {
@@ -220,43 +264,42 @@ static uint16_t bt_serial_event_callback(SerialServiceEvent event, void* context
     return ret;
 }
 
-// Called from RPC thread
+// Called from RPC thread. Context is the PEER; TX and the ack-wait are scoped to
+// that peer's BLE connection so two sessions never block on each other.
 static void bt_rpc_send_bytes_callback(void* context, uint8_t* bytes, size_t bytes_len) {
     furi_assert(context);
-    Bt* bt = context;
+    BtPeer* peer = context;
+    Bt* bt = peer->bt;
 
-    if(furi_event_flag_get(bt->rpc_event) & BT_RPC_EVENT_DISCONNECTED) {
+    if(furi_event_flag_get(peer->rpc_event) & BT_RPC_EVENT_DISCONNECTED) {
         // Early stop from sending if we're already disconnected
         return;
     }
-    furi_event_flag_clear(bt->rpc_event, BT_RPC_EVENT_ALL & (~BT_RPC_EVENT_DISCONNECTED));
+    furi_event_flag_clear(peer->rpc_event, BT_RPC_EVENT_ALL & (~BT_RPC_EVENT_DISCONNECTED));
     size_t bytes_sent = 0;
     while(bytes_sent < bytes_len) {
         size_t bytes_remain = bytes_len - bytes_sent;
-        if(bytes_remain > bt->max_packet_size) {
-            ble_profile_serial_tx(bt->current_profile, &bytes[bytes_sent], bt->max_packet_size);
-            bytes_sent += bt->max_packet_size;
-        } else {
-            ble_profile_serial_tx(bt->current_profile, &bytes[bytes_sent], bytes_remain);
-            bytes_sent += bytes_remain;
-        }
+        size_t chunk = (bytes_remain > bt->max_packet_size) ? bt->max_packet_size : bytes_remain;
+        ble_profile_serial_tx_to(bt->current_profile, peer->conn_handle, &bytes[bytes_sent], chunk);
+        bytes_sent += chunk;
         // We want BT_RPC_EVENT_DISCONNECTED to stick, so don't clear
         uint32_t event_flag = furi_event_flag_wait(
-            bt->rpc_event, BT_RPC_EVENT_ALL, FuriFlagWaitAny | FuriFlagNoClear, FuriWaitForever);
+            peer->rpc_event, BT_RPC_EVENT_ALL, FuriFlagWaitAny | FuriFlagNoClear, FuriWaitForever);
         if(event_flag & BT_RPC_EVENT_DISCONNECTED) {
             break;
         } else {
             // If we didn't get BT_RPC_EVENT_DISCONNECTED, then clear everything else
-            furi_event_flag_clear(bt->rpc_event, BT_RPC_EVENT_ALL & (~BT_RPC_EVENT_DISCONNECTED));
+            furi_event_flag_clear(peer->rpc_event, BT_RPC_EVENT_ALL & (~BT_RPC_EVENT_DISCONNECTED));
         }
     }
 }
 
 static void bt_serial_buffer_is_empty_callback(void* context) {
     furi_assert(context);
-    Bt* bt = context;
+    BtPeer* peer = context;
+    Bt* bt = peer->bt;
     furi_check(furi_hal_bt_check_profile_type(bt->current_profile, ble_profile_serial));
-    ble_profile_serial_notify_buffer_is_empty(bt->current_profile);
+    ble_profile_serial_notify_buffer_is_empty_to(bt->current_profile, peer->conn_handle);
 }
 
 // Called from GAP thread
@@ -266,14 +309,13 @@ static bool bt_on_gap_event_callback(GapEvent event, void* context) {
     bool ret = false;
     bt->pin = 0;
     bool do_update_status = false;
-    bool current_profile_is_serial =
-        furi_hal_bt_check_profile_type(bt->current_profile, ble_profile_serial);
 
     if(event.type == GapEventTypeConnected) {
         // Update status bar
         bt->status = BtStatusConnected;
         do_update_status = true;
-        bt_open_rpc_connection(bt);
+        // Open THIS client's own RPC session (dual-link: keyed by conn handle).
+        bt_open_rpc_connection(bt, event.data.connection_handle);
         // Update battery level
         PowerInfo info;
         power_get_info(bt->power, &info);
@@ -284,19 +326,21 @@ static bool bt_on_gap_event_callback(GapEvent event, void* context) {
             furi_message_queue_put(bt->message_queue, &message, FuriWaitForever) == FuriStatusOk);
         ret = true;
     } else if(event.type == GapEventTypeDisconnected) {
-        if(current_profile_is_serial && bt->rpc_session) {
-            FURI_LOG_I(TAG, "Close RPC connection");
-            ble_profile_serial_set_rpc_active(
-                bt->current_profile, FuriHalBtSerialRpcStatusNotActive);
-            furi_event_flag_set(bt->rpc_event, BT_RPC_EVENT_DISCONNECTED);
-            rpc_session_close(bt->rpc_session);
-            ble_profile_serial_set_event_callback(bt->current_profile, 0, NULL, NULL);
-            bt->rpc_session = NULL;
+        // Close only the RPC session for the link that dropped.
+        bt_close_rpc_connection_peer(bt, event.data.connection_handle);
+        if(bt_active_peer_count(bt) > 0) {
+            // Another client is still connected -> keep showing "connected".
+            bt->status = BtStatusConnected;
+            do_update_status = true;
         }
         ret = true;
     } else if(event.type == GapEventTypeStartAdvertising) {
-        bt->status = BtStatusAdvertising;
-        do_update_status = true;
+        // Dual-link: we re-advertise for a 2nd client WHILE one is connected.
+        // Don't downgrade the "connected" icon to "advertising" in that case.
+        if(bt_active_peer_count(bt) == 0) {
+            bt->status = BtStatusAdvertising;
+            do_update_status = true;
+        }
         ret = true;
     } else if(event.type == GapEventTypeStopAdvertising) {
         bt->status = BtStatusOff;
@@ -372,38 +416,58 @@ static void bt_show_warning(Bt* bt, const char* text) {
     dialog_message_show(bt->dialogs, bt->dialog_message);
 }
 
-void bt_open_rpc_connection(Bt* bt) {
-    if(!bt->rpc_session && bt->status == BtStatusConnected) {
-        // Clear BT_RPC_EVENT_DISCONNECTED because it might be set from previous session
-        furi_event_flag_clear(bt->rpc_event, BT_RPC_EVENT_DISCONNECTED);
-        if(furi_hal_bt_check_profile_type(bt->current_profile, ble_profile_serial)) {
-            // Open RPC session
-            bt->rpc_session = rpc_session_open(bt->rpc, RpcOwnerBle);
-            if(bt->rpc_session) {
-                FURI_LOG_I(TAG, "Open RPC connection");
-                rpc_session_set_send_bytes_callback(bt->rpc_session, bt_rpc_send_bytes_callback);
-                rpc_session_set_buffer_is_empty_callback(
-                    bt->rpc_session, bt_serial_buffer_is_empty_callback);
-                rpc_session_set_context(bt->rpc_session, bt);
-                ble_profile_serial_set_event_callback(
-                    bt->current_profile, RPC_BUFFER_SIZE, bt_serial_event_callback, bt);
-                ble_profile_serial_set_rpc_active(
-                    bt->current_profile, FuriHalBtSerialRpcStatusActive);
-            } else {
-                FURI_LOG_W(TAG, "RPC is busy, failed to open new session");
-            }
-        }
+void bt_open_rpc_connection(Bt* bt, uint16_t conn_handle) {
+    if(!furi_hal_bt_check_profile_type(bt->current_profile, ble_profile_serial)) return;
+    // Already open for this connection?
+    if(bt_peer_by_handle(bt, conn_handle)) return;
+
+    BtPeer* peer = bt_peer_alloc_slot(bt, conn_handle);
+    if(!peer) {
+        FURI_LOG_W(TAG, "No free peer slot for conn %d", conn_handle);
+        return;
+    }
+    // Clear a stale DISCONNECTED flag left from a previous use of this slot
+    furi_event_flag_clear(peer->rpc_event, BT_RPC_EVENT_DISCONNECTED);
+
+    peer->rpc_session = rpc_session_open(bt->rpc, RpcOwnerBle);
+    if(peer->rpc_session) {
+        FURI_LOG_I(TAG, "Open RPC connection for conn %d", conn_handle);
+        rpc_session_set_send_bytes_callback(peer->rpc_session, bt_rpc_send_bytes_callback);
+        rpc_session_set_buffer_is_empty_callback(
+            peer->rpc_session, bt_serial_buffer_is_empty_callback);
+        rpc_session_set_context(peer->rpc_session, peer);
+        // Register this connection's own serial peer (routes RX/TX by handle).
+        ble_profile_serial_add_peer(
+            bt->current_profile, conn_handle, RPC_BUFFER_SIZE, bt_serial_event_callback, peer);
+        ble_profile_serial_set_rpc_active(bt->current_profile, FuriHalBtSerialRpcStatusActive);
+    } else {
+        FURI_LOG_W(TAG, "RPC is busy, failed to open new session");
+        peer->used = false;
+    }
+}
+
+void bt_close_rpc_connection_peer(Bt* bt, uint16_t conn_handle) {
+    if(!furi_hal_bt_check_profile_type(bt->current_profile, ble_profile_serial)) return;
+    BtPeer* peer = bt_peer_by_handle(bt, conn_handle);
+    if(!peer) return;
+
+    FURI_LOG_I(TAG, "Close RPC connection for conn %d", conn_handle);
+    ble_profile_serial_remove_peer(bt->current_profile, conn_handle);
+    furi_event_flag_set(peer->rpc_event, BT_RPC_EVENT_DISCONNECTED);
+    if(peer->rpc_session) {
+        rpc_session_close(peer->rpc_session);
+        peer->rpc_session = NULL;
+    }
+    peer->used = false;
+    // Only mark the whole serial profile inactive when NO client remains.
+    if(bt_active_peer_count(bt) == 0) {
+        ble_profile_serial_set_rpc_active(bt->current_profile, FuriHalBtSerialRpcStatusNotActive);
     }
 }
 
 void bt_close_rpc_connection(Bt* bt) {
-    if(furi_hal_bt_check_profile_type(bt->current_profile, ble_profile_serial) &&
-       bt->rpc_session) {
-        FURI_LOG_I(TAG, "Close RPC connection");
-        furi_event_flag_set(bt->rpc_event, BT_RPC_EVENT_DISCONNECTED);
-        rpc_session_close(bt->rpc_session);
-        ble_profile_serial_set_event_callback(bt->current_profile, 0, NULL, NULL);
-        bt->rpc_session = NULL;
+    for(uint8_t i = 0; i < BT_PEERS_MAX; i++) {
+        if(bt->peers[i].used) bt_close_rpc_connection_peer(bt, bt->peers[i].conn_handle);
     }
 }
 

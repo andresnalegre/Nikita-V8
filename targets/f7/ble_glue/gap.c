@@ -42,6 +42,7 @@ typedef struct {
     bool enable_adv;
     bool is_secure;
     uint8_t negotiation_round;
+    uint8_t connection_count; // active BLE links (dual-link: up to CFG_BLE_NUM_LINK)
 } Gap;
 
 typedef enum {
@@ -130,21 +131,29 @@ BleEventFlowStatus ble_event_app_notification(void* pckt) {
     case HCI_DISCONNECTION_COMPLETE_EVT_CODE: {
         hci_disconnection_complete_event_rp0* disconnection_complete_event =
             (hci_disconnection_complete_event_rp0*)event_pckt->data;
+        // DUAL-LINK: one link dropped. Decrement the count; only go Idle when the
+        // LAST link is gone. Keep the other client's session alive.
+        if(gap->connection_count) gap->connection_count--;
         if(disconnection_complete_event->Connection_Handle == gap->service.connection_handle) {
             gap->service.connection_handle = 0;
-            gap->state = GapStateIdle;
-            FURI_LOG_I(
-                TAG, "Disconnect from client. Reason: %02X", disconnection_complete_event->Reason);
         }
+        gap->state = gap->connection_count ? GapStateConnected : GapStateIdle;
+        FURI_LOG_I(
+            TAG,
+            "Disconnect from client. Reason: %02X. Links left: %d",
+            disconnection_complete_event->Reason,
+            gap->connection_count);
         gap->is_secure = false;
         gap->negotiation_round = 0;
         // Enterprise sleep
         furi_delay_us(666 + 666);
-        if(gap->enable_adv) {
-            // Restart advertising
+        if(gap->enable_adv && gap->connection_count < CFG_BLE_NUM_LINK) {
+            // Restart advertising so the freed slot can be filled again
             gap_advertise_start(GapStateAdvFast);
         }
-        GapEvent event = {.type = GapEventTypeDisconnected};
+        GapEvent event = {
+            .type = GapEventTypeDisconnected,
+            .data.connection_handle = disconnection_complete_event->Connection_Handle};
         gap->on_event_cb(event, gap->context);
     } break;
 
@@ -186,12 +195,20 @@ BleEventFlowStatus ble_event_app_notification(void* pckt) {
             gap->connection_params.slave_latency = event->Conn_Latency;
             gap->connection_params.supervisor_timeout = event->Supervision_Timeout;
 
-            // Stop advertising as connection completed
-            furi_timer_stop(gap->advertise_timer);
-
-            // Update connection status and handle
+            // Update connection status and handle. service.connection_handle
+            // holds the MOST RECENT link (pairing right after connect uses it).
             gap->state = GapStateConnected;
             gap->service.connection_handle = event->Connection_Handle;
+            if(gap->connection_count < CFG_BLE_NUM_LINK) gap->connection_count++;
+
+            // DUAL-LINK: keep advertising for a second client until we hit the
+            // stack's max links; only then stop. This is what lets iOS AND
+            // qFlipper both connect over BLE at the same time.
+            if(gap->enable_adv && gap->connection_count < CFG_BLE_NUM_LINK) {
+                gap_advertise_start(GapStateAdvFast);
+            } else {
+                furi_timer_stop(gap->advertise_timer);
+            }
 
             gap_verify_connection_parameters(gap);
 
@@ -279,7 +296,9 @@ BleEventFlowStatus ble_event_app_notification(void* pckt) {
                 aci_gap_terminate(gap->service.connection_handle, 5);
             } else {
                 FURI_LOG_I(TAG, "Pairing complete");
-                GapEvent event = {.type = GapEventTypeConnected};
+                GapEvent event = {
+                    .type = GapEventTypeConnected,
+                    .data.connection_handle = pairing_complete->Connection_Handle};
                 gap->on_event_cb(event, gap->context); //-V595
             }
             break;

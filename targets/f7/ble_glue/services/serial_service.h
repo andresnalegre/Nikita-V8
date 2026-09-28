@@ -50,6 +50,25 @@ void ble_svc_serial_notify_buffer_is_empty(BleServiceSerial* service);
 
 bool ble_svc_serial_update_tx(BleServiceSerial* service, uint8_t* data, uint16_t data_len);
 
+/* Dual-link API: one peer per BLE connection, routed by connection handle. */
+
+void ble_svc_serial_add_peer(
+    BleServiceSerial* service,
+    uint16_t conn_handle,
+    uint16_t buff_size,
+    SerialServiceEventCallback callback,
+    void* context);
+
+void ble_svc_serial_remove_peer(BleServiceSerial* service, uint16_t conn_handle);
+
+void ble_svc_serial_notify_buffer_is_empty_to(BleServiceSerial* service, uint16_t conn_handle);
+
+bool ble_svc_serial_update_tx_to(
+    BleServiceSerial* service,
+    uint16_t conn_handle,
+    uint8_t* data,
+    uint16_t data_len);
+
 #ifdef __cplusplus
 }
 #endif

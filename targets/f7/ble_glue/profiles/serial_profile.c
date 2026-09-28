@@ -124,3 +124,44 @@ bool ble_profile_serial_tx(FuriHalBleProfileBase* profile, uint8_t* data, uint16
 
     return ble_svc_serial_update_tx(serial_profile->serial_svc, data, size);
 }
+
+// ---- Dual-link (per-connection) variants ---------------------------------
+
+void ble_profile_serial_add_peer(
+    FuriHalBleProfileBase* profile,
+    uint16_t conn_handle,
+    uint16_t buff_size,
+    FuriHalBtSerialCallback callback,
+    void* context) {
+    furi_check(profile && (profile->config == ble_profile_serial));
+    BleProfileSerial* serial_profile = (BleProfileSerial*)profile;
+    ble_svc_serial_add_peer(
+        serial_profile->serial_svc, conn_handle, buff_size, callback, context);
+}
+
+void ble_profile_serial_remove_peer(FuriHalBleProfileBase* profile, uint16_t conn_handle) {
+    furi_check(profile && (profile->config == ble_profile_serial));
+    BleProfileSerial* serial_profile = (BleProfileSerial*)profile;
+    ble_svc_serial_remove_peer(serial_profile->serial_svc, conn_handle);
+}
+
+void ble_profile_serial_notify_buffer_is_empty_to(
+    FuriHalBleProfileBase* profile,
+    uint16_t conn_handle) {
+    furi_check(profile && (profile->config == ble_profile_serial));
+    BleProfileSerial* serial_profile = (BleProfileSerial*)profile;
+    ble_svc_serial_notify_buffer_is_empty_to(serial_profile->serial_svc, conn_handle);
+}
+
+bool ble_profile_serial_tx_to(
+    FuriHalBleProfileBase* profile,
+    uint16_t conn_handle,
+    uint8_t* data,
+    uint16_t size) {
+    furi_check(profile && (profile->config == ble_profile_serial));
+    BleProfileSerial* serial_profile = (BleProfileSerial*)profile;
+    if(size > BLE_PROFILE_SERIAL_PACKET_SIZE_MAX) {
+        return false;
+    }
+    return ble_svc_serial_update_tx_to(serial_profile->serial_svc, conn_handle, data, size);
+}

@@ -56,6 +56,28 @@ void ble_profile_serial_set_event_callback(
     FuriHalBtSerialCallback callback,
     void* context);
 
+/* Dual-link (per-connection) API. Each BLE connection registers its own peer,
+ * so two clients (e.g. iOS + qFlipper) can each run an RPC session at once. */
+
+void ble_profile_serial_add_peer(
+    FuriHalBleProfileBase* profile,
+    uint16_t conn_handle,
+    uint16_t buff_size,
+    FuriHalBtSerialCallback callback,
+    void* context);
+
+void ble_profile_serial_remove_peer(FuriHalBleProfileBase* profile, uint16_t conn_handle);
+
+void ble_profile_serial_notify_buffer_is_empty_to(
+    FuriHalBleProfileBase* profile,
+    uint16_t conn_handle);
+
+bool ble_profile_serial_tx_to(
+    FuriHalBleProfileBase* profile,
+    uint16_t conn_handle,
+    uint8_t* data,
+    uint16_t size);
+
 #ifdef __cplusplus
 }
 #endif

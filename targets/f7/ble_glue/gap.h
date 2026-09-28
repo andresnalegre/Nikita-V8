@@ -31,6 +31,7 @@ typedef enum {
 typedef union {
     uint32_t pin_code;
     uint16_t max_packet_size;
+    uint16_t connection_handle; // Connected/Disconnected: which BLE link
 } GapEventData;
 
 typedef struct {

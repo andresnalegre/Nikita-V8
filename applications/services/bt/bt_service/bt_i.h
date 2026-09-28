@@ -23,6 +23,19 @@
 
 #define BT_KEYS_STORAGE_PATH INT_PATH(BT_KEYS_STORAGE_FILE_NAME)
 
+// Dual-link: one RPC session per BLE connection (up to CFG_BLE_NUM_LINK). Each
+// peer carries its own session, its own send/ack event flag, and the BLE
+// connection handle used to route TX and flow control to that client only.
+#define BT_PEERS_MAX 2
+
+typedef struct {
+    struct Bt* bt; // back-reference (context for RPC/serial callbacks)
+    uint16_t conn_handle;
+    bool used;
+    RpcSession* rpc_session;
+    FuriEventFlag* rpc_event;
+} BtPeer;
+
 typedef enum {
     BtMessageTypeUpdateStatus,
     BtMessageTypeUpdateBatteryLevel,
@@ -83,8 +96,9 @@ struct Bt {
     DialogMessage* dialog_message;
     Power* power;
     Rpc* rpc;
-    RpcSession* rpc_session;
-    FuriEventFlag* rpc_event;
+    RpcSession* rpc_session; // legacy/unused in the dual-link data path
+    FuriEventFlag* rpc_event; // legacy/unused in the dual-link data path
+    BtPeer peers[BT_PEERS_MAX];
     FuriEventFlag* api_event;
     BtStatusChangedCallback status_changed_cb;
     void* status_changed_ctx;
@@ -92,13 +106,21 @@ struct Bt {
     bool suppress_pin_screen;
 };
 
-/** Open a new RPC connection
+/** Open a new RPC connection for a BLE link (dual-link: one per connection)
  *
  * @param bt                    Bt instance
+ * @param conn_handle           BLE connection handle of the client
  */
-void bt_open_rpc_connection(Bt* bt);
+void bt_open_rpc_connection(Bt* bt, uint16_t conn_handle);
 
-/** Close the active RPC connection
+/** Close the RPC connection for one BLE link
+ *
+ * @param bt                    Bt instance
+ * @param conn_handle           BLE connection handle of the client
+ */
+void bt_close_rpc_connection_peer(Bt* bt, uint16_t conn_handle);
+
+/** Close ALL RPC connections
  *
  * @param bt                    Bt instance
  */
