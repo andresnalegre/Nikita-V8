@@ -26,9 +26,13 @@
 #include <furi.h>
 #include <furi_hal.h>
 #include <furi_hal_version.h>
+#include <furi_hal_serial.h>
+#include <furi_hal_serial_control.h>
 #include <toolbox/version.h>
 #include <storage/storage.h>
 #include <notification/notification_messages.h>
+#include <gui/gui.h>
+#include <gui/view_port.h>
 #include <cli/cli.h>
 #include <toolbox/cli/cli_registry.h>
 #include <toolbox/cli/cli_command.h>
@@ -53,6 +57,16 @@ typedef struct {
     NotificationApp* notif;
     FuriThread* thread;
     volatile bool running;
+    // GPIO UP!/DOWN — watches the AIO board's UART heartbeat and flashes an
+    // on-screen banner + LED when the board is plugged/unplugged.
+    Gui* gui;
+    ViewPort* gpio_vp;
+    bool gpio_up;              // current detected state
+    bool gpio_known;          // have we determined a state yet
+    int gpio_miss;            // consecutive successful listens with no heartbeat
+    uint8_t gpio_tick;        // sub-divides the poll loop (heartbeat check is slower)
+    char gpio_banner[20];     // "GPIO UP!" / "GPIO DOWN"
+    volatile uint32_t gpio_banner_until; // tick until which the banner shows (0=off)
 } NikitaAgent;
 
 static NikitaAgent* g_agent = NULL;
@@ -305,10 +319,112 @@ static void agent_poll_mailbox(NikitaAgent* app) {
     furi_string_free(res);
 }
 
+// ---- GPIO UP!/DOWN -- watch the AIO board's UART heartbeat ----------------
+// The board (Nikita Marauder v2.0.0) emits "[NIKITA-AIO:UP:...]" on the GPIO
+// USART every ~3s. We periodically listen for it (non-blocking acquire, so we
+// never fight the `marauder` CLI or the WIFI app) and flash a full-screen banner
+// + LED when the board appears ("GPIO UP!") or disappears ("GPIO DOWN").
+
+#define GPIO_MARK "[NIKITA-AIO:UP"
+
+static void gpio_vp_draw(Canvas* canvas, void* ctx) {
+    UNUSED(ctx);
+    NikitaAgent* app = g_agent;
+    if(!app || app->gpio_banner_until == 0) return;
+    canvas_set_color(canvas, ColorBlack);
+    canvas_draw_box(canvas, 6, 20, 116, 24);
+    canvas_set_color(canvas, ColorWhite);
+    canvas_draw_frame(canvas, 6, 20, 116, 24);
+    canvas_set_font(canvas, FontPrimary);
+    canvas_draw_str_aligned(canvas, 64, 32, AlignCenter, AlignCenter, app->gpio_banner);
+}
+
+static void agent_gpio_set(NikitaAgent* app, bool up) {
+    if(app->gpio_known && app->gpio_up == up) return; // no change -> no banner
+    app->gpio_up = up;
+    app->gpio_known = true;
+    strncpy(app->gpio_banner, up ? "GPIO UP!" : "GPIO DOWN", sizeof(app->gpio_banner) - 1);
+    app->gpio_banner[sizeof(app->gpio_banner) - 1] = '\0';
+    app->gpio_banner_until = furi_get_tick() + furi_ms_to_ticks(2000);
+    if(app->gpio_vp) {
+        view_port_enabled_set(app->gpio_vp, true);
+        view_port_update(app->gpio_vp);
+    }
+    if(app->notif)
+        notification_message(
+            app->notif, up ? &sequence_set_only_green_255 : &sequence_set_only_red_255);
+}
+
+static void agent_gpio_rx(FuriHalSerialHandle* handle, FuriHalSerialRxEvent event, void* ctx) {
+    FuriStreamBuffer* sb = ctx;
+    if(event == FuriHalSerialRxEventData) {
+        uint8_t b = furi_hal_serial_async_rx(handle);
+        furi_stream_buffer_send(sb, &b, 1, 0);
+    }
+}
+
+static void agent_gpio_watch(NikitaAgent* app) {
+    // Non-blocking: if the UART is held (marauder CLI / WIFI app running), the
+    // board is obviously present -> treat as UP and don't disturb them.
+    FuriHalSerialHandle* serial = furi_hal_serial_control_acquire(FuriHalSerialIdUsart);
+    if(!serial) {
+        app->gpio_miss = 0;
+        agent_gpio_set(app, true);
+        return;
+    }
+    FuriStreamBuffer* sb = furi_stream_buffer_alloc(1024, 1);
+    furi_hal_serial_init(serial, 115200);
+    furi_hal_serial_async_rx_start(serial, agent_gpio_rx, sb, false);
+
+    char win[513];
+    size_t wlen = 0;
+    uint8_t buf[128];
+    bool seen = false;
+    uint32_t start = furi_get_tick();
+    while(furi_get_tick() - start < furi_ms_to_ticks(1300) && !seen) {
+        size_t n = furi_stream_buffer_receive(sb, buf, sizeof(buf), furi_ms_to_ticks(50));
+        if(!n) continue;
+        if(wlen + n > sizeof(win) - 1) {
+            size_t drop = wlen + n - (sizeof(win) - 1);
+            memmove(win, win + drop, wlen - drop);
+            wlen -= drop;
+        }
+        memcpy(win + wlen, buf, n);
+        wlen += n;
+        win[wlen] = '\0';
+        if(strstr(win, GPIO_MARK)) seen = true;
+    }
+
+    furi_hal_serial_async_rx_stop(serial);
+    furi_hal_serial_deinit(serial);
+    furi_hal_serial_control_release(serial);
+    furi_stream_buffer_free(sb);
+
+    if(seen) {
+        app->gpio_miss = 0;
+        agent_gpio_set(app, true);
+    } else {
+        if(app->gpio_miss < 100) app->gpio_miss++;
+        if(app->gpio_miss >= 3) agent_gpio_set(app, false); // ~3 clean misses = gone
+    }
+}
+
 static int32_t agent_thread(void* context) {
     NikitaAgent* app = context;
     while(app->running) {
         agent_poll_mailbox(app);
+        // Hide the banner once its window passes.
+        if(app->gpio_banner_until && furi_get_tick() >= app->gpio_banner_until) {
+            app->gpio_banner_until = 0;
+            if(app->gpio_vp) view_port_enabled_set(app->gpio_vp, false);
+            if(app->notif) notification_message(app->notif, &sequence_reset_rgb);
+        }
+        // Check the GPIO heartbeat on a slow cadence (~every 10s) to keep the
+        // USART mostly free for the marauder CLI.
+        if(++app->gpio_tick >= 20) { // 20 * AGENT_POLL_MS(500) = 10s
+            app->gpio_tick = 0;
+            agent_gpio_watch(app);
+        }
         furi_delay_ms(AGENT_POLL_MS);
     }
     return 0;
@@ -353,6 +469,14 @@ int32_t nikita_agent_on_system_start(void* p) {
     // will read it as "does not exist" forever. From here on the agent only ever
     // OVERWRITES its content (pending <-> answer), never removes it.
     agent_res_pending(app);
+
+    // GPIO UP!/DOWN banner: a full-screen ViewPort, disabled until a plug/unplug
+    // event flashes it briefly over whatever is on screen.
+    app->gui = furi_record_open(RECORD_GUI);
+    app->gpio_vp = view_port_alloc();
+    view_port_draw_callback_set(app->gpio_vp, gpio_vp_draw, app);
+    view_port_enabled_set(app->gpio_vp, false);
+    gui_add_view_port(app->gui, app->gpio_vp, GuiLayerFullscreen);
 
     app->running = true;
     app->thread = furi_thread_alloc_ex("NikitaAgent", 4096, agent_thread, app);
