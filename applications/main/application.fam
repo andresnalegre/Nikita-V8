@@ -15,6 +15,7 @@ App(
         "clock",
         "subghz_remote",
         "nikita_wifi",
+        "nikita_buddy",
         "main_apps_on_start",
     ],
 )
