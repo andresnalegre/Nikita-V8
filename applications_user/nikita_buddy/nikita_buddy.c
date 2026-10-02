@@ -40,6 +40,12 @@
 #define NB_BUDDY_DIR "/ext/nikita/buddy"
 #define NB_REQ_PATH "/ext/nikita/buddy/req.json"
 #define NB_RES_PATH "/ext/nikita/buddy/res.json"
+// Nikita's proactive voice: the companion drops a line here on her own judgement
+// (job done, a find, a heads-up) and the Buddy shows it on screen the moment it
+// lands -- no question required. Consumed like req/res via a "shown" flag so a
+// stale line never replays on the next launch.
+//   say.json  {"id":<n>,"text":"<line>","mood":"talking|thinking|idle"}
+#define NB_SAY_PATH "/ext/nikita/buddy/say.json"
 // The shared "+" store, written by the phone and qFlipper.
 #define NB_EXTRAS_PATH "/ext/nikita/extras.json"
 
@@ -87,6 +93,7 @@ typedef enum {
 typedef enum {
     NbCustomPoll = 1,
     NbCustomAnim = 2, // advance the face animation on the GUI thread
+    NbCustomSay = 3,  // check the proactive say.json mailbox on the GUI thread
 } NbCustomEvent;
 
 typedef struct {
@@ -100,6 +107,8 @@ typedef struct {
     View* face;             // Nikita's animated face (reply screen)
     FuriTimer* poll_timer;
     FuriTimer* anim_timer;  // drives the face while it's on screen
+    FuriTimer* say_timer;   // polls say.json for Nikita's proactive lines
+    uint32_t last_say_id;   // id of the last proactive line we showed this run
     bool intro;             // true while the opening Nikita face is showing (OK -> menu)
 
     char prompt[NB_PROMPT_MAX];
@@ -212,6 +221,23 @@ static bool nb_json_text(const char* json, char* out, size_t cap) {
             out[n++] = *at++;
         }
     }
+    out[n] = '\0';
+    return true;
+}
+
+// Copy the string value that follows "key" (e.g. "mood":"talking") into `out`.
+// A plain scan, no unescaping -- enough for the short enum words we store.
+static bool nb_json_value(const char* json, const char* key, char* out, size_t cap) {
+    const char* at = strstr(json, key);
+    if(!at) return false;
+    at = strchr(at, ':');
+    if(!at) return false;
+    ++at;
+    while(*at == ' ' || *at == '\t') ++at;
+    if(*at != '"') return false;
+    ++at;
+    size_t n = 0;
+    while(*at && *at != '"' && n + 1 < cap) out[n++] = *at++;
     out[n] = '\0';
     return true;
 }
@@ -400,6 +426,65 @@ static void nb_begin_wait(NikitaBuddy* app) {
     furi_timer_start(app->anim_timer, furi_ms_to_ticks(100)); // ~10 fps
 }
 
+// ---- Proactive say channel -----------------------------------------------
+
+// Put Nikita on screen speaking a line she pushed herself (not a reply to a
+// typed question). Takes over whatever view we're on; nb_check_say keeps it off
+// the keyboard so typing is never lost.
+static void nb_show_say(NikitaBuddy* app, const char* text, NikitaFaceMood mood) {
+    app->intro = false;
+    app->answered = true; // not waiting on a res.json reply
+    furi_timer_stop(app->poll_timer);
+    nikita_face_set_text(app->face, text);
+    nikita_face_set_mood(app->face, mood);
+    nb_switch(app, NbViewFace);
+    furi_timer_start(app->anim_timer, furi_ms_to_ticks(100));
+    notification_message(app->notifications, &sequence_success);
+}
+
+// Check say.json for a fresh proactive line and show it if there is one.
+// Consumed on disk (rewritten with "shown":1) so the same line never replays on
+// the next launch; skipped while the keyboard is open so typing isn't lost.
+static bool nb_check_say(NikitaBuddy* app) {
+    char buf[NB_REPLY_MAX];
+    if(nb_read_file(app, NB_SAY_PATH, buf, sizeof(buf)) <= 0) return false;
+    uint32_t id = 0;
+    if(!nb_json_uint(buf, "\"id\"", &id) || id == 0) return false;
+    if(id == app->last_say_id) return false; // already shown this run
+    uint32_t shown = 0;
+    if(nb_json_uint(buf, "\"shown\"", &shown) && shown) {
+        app->last_say_id = id; // consumed in a previous run
+        return false;
+    }
+    char text[NB_REPLY_MAX];
+    if(!nb_json_text(buf, text, sizeof(text)) || text[0] == '\0') return false;
+    // Don't interrupt active typing; leave it unconsumed so it shows afterwards.
+    if(app->current_view == NbViewText) return false;
+
+    NikitaFaceMood mood = NikitaFaceTalking;
+    char m[16];
+    if(nb_json_value(buf, "\"mood\"", m, sizeof(m))) {
+        if(!strcmp(m, "idle"))
+            mood = NikitaFaceIdle;
+        else if(!strcmp(m, "thinking"))
+            mood = NikitaFaceThinking;
+    }
+    app->last_say_id = id;
+    // Mark consumed on disk so it won't replay next launch.
+    FuriString* j = furi_string_alloc();
+    furi_string_printf(j, "{\"id\":%lu,\"shown\":1}", (unsigned long)id);
+    nb_write_file(app, NB_SAY_PATH, furi_string_get_cstr(j), furi_string_size(j));
+    furi_string_free(j);
+
+    nb_show_say(app, text, mood);
+    return true;
+}
+
+static void nb_say_timer_cb(void* context) {
+    NikitaBuddy* app = context;
+    view_dispatcher_send_custom_event(app->view_dispatcher, NbCustomSay);
+}
+
 // ---- Callbacks -----------------------------------------------------------
 
 static void nb_poll_timer_cb(void* context) {
@@ -413,6 +498,11 @@ static bool nb_custom_event_cb(void* context, uint32_t event) {
     // Animation tick: advance the face (blink, mouth, typewriter).
     if(event == NbCustomAnim) {
         nikita_face_tick(app->face);
+        return true;
+    }
+    // Proactive line from Nikita waiting on the card?
+    if(event == NbCustomSay) {
+        nb_check_say(app);
         return true;
     }
     if(event != NbCustomPoll) return false;
@@ -489,10 +579,12 @@ static void nb_menu_cb(void* context, uint32_t index) {
             0,
             128,
             64,
-            "Nikita Buddy v0.2\n\n"
+            "Nikita Buddy v0.6\n\n"
             "One Nikita, reached from the\nFlipper. Your question goes to\n"
             "the SD mailbox; the iPhone or\nqFlipper answers over its Kimi\n"
             "link -- same memory, same\nskills. No internet here.\n\n"
+            "She can also speak first: when\nshe has something to tell you\n"
+            "it shows on her face here, on\nher own.\n\n"
             "\"Scan what I'm connected to\"\nsends her security brain across\n"
             "your radios, network and BLE:\nshe finds and reports, you\ndecide.\n\n"
             "/ext/nikita/buddy/");
@@ -584,9 +676,14 @@ static NikitaBuddy* nikita_buddy_alloc(void) {
 
     app->poll_timer = furi_timer_alloc(nb_poll_timer_cb, FuriTimerTypePeriodic, app);
     app->anim_timer = furi_timer_alloc(nb_anim_timer_cb, FuriTimerTypePeriodic, app);
+    app->say_timer = furi_timer_alloc(nb_say_timer_cb, FuriTimerTypePeriodic, app);
 
     view_dispatcher_attach_to_gui(
         app->view_dispatcher, app->gui, ViewDispatcherTypeFullscreen);
+
+    // Nikita's proactive voice runs for the whole app lifetime, from any view:
+    // ~1.5s is responsive without hammering the card.
+    furi_timer_start(app->say_timer, furi_ms_to_ticks(1500));
     return app;
 }
 
@@ -595,6 +692,8 @@ static void nikita_buddy_free(NikitaBuddy* app) {
     furi_timer_free(app->poll_timer);
     furi_timer_stop(app->anim_timer);
     furi_timer_free(app->anim_timer);
+    furi_timer_stop(app->say_timer);
+    furi_timer_free(app->say_timer);
 
     view_dispatcher_remove_view(app->view_dispatcher, NbViewMenu);
     view_dispatcher_remove_view(app->view_dispatcher, NbViewText);
@@ -616,6 +715,10 @@ int32_t nikita_buddy_app(void* p) {
     UNUSED(p);
     NikitaBuddy* app = nikita_buddy_alloc();
     nb_show_intro(app); // Nikita greets you first; OK opens the menu
+    // If the companion dropped a line just before opening the app (the "say and
+    // launch" path for when the Buddy wasn't already up), show it right away
+    // instead of the intro.
+    nb_check_say(app);
     view_dispatcher_run(app->view_dispatcher);
     nikita_buddy_free(app);
     return 0;
