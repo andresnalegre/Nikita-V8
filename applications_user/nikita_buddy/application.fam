@@ -1,14 +1,26 @@
 App(
+    # MENUEXTERNAL: part of the firmware's own app set, not a loose .fap. It is
+    # registered in FLIPPER_EXTERNAL_APPS, so it is launched BY NAME
+    # ("Nikita Buddy") -- by the hold-RIGHT desktop gesture and by the companions
+    # over CLI/BLE -- and it appears in the main menu. It is bundled with the
+    # firmware image (version-matched), which is what stops the stale/duplicate
+    # /ext fap and open-by-path conflicts of a plain EXTERNAL app.
     appid="nikita_buddy",
     name="Nikita Buddy",
-    apptype=FlipperAppType.EXTERNAL,
+    apptype=FlipperAppType.MENUEXTERNAL,
     entry_point="nikita_buddy_app",
-    requires=["gui", "notification", "storage"],
+    requires=[
+        "gui",
+        "notification",
+        "storage",
+    ],
     stack_size=8 * 1024,
-    fap_version="0.6",
+    icon="A_NikitaBuddy_14",
+    order=46,
+    fap_version="0.7",
     fap_icon="icons/nikita_10px.png",
     fap_category="Bluetooth",
-    fap_description="Talk to Nikita from the Flipper. Her animated face answers you Undertale-style; the phone or qFlipper runs the Kimi link.",
+    fap_description="Talk to Nikita from the Flipper. Her animated face answers you Undertale-style; she can also speak first, on her own. The phone or qFlipper runs the Kimi link.",
     fap_author="Nikita",
     sources=["nikita_buddy.c", "nikita_face.c"],
 )

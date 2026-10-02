@@ -175,9 +175,10 @@ bool desktop_scene_main_on_event(void* context, SceneManagerEvent event) {
             break;
         case DesktopMainEventOpenFavoriteRightLong:
             // Hold RIGHT summons Nikita: her Buddy is always one gesture away
-            // from the desktop, whatever else is configured.
+            // from the desktop, whatever else is configured. Built into the
+            // firmware now, so it is launched by name -- no SD .fap path.
             loader_start_detached_with_gui_error(
-                desktop->loader, "/ext/apps/Bluetooth/nikita_buddy.fap", NULL);
+                desktop->loader, "Nikita Buddy", NULL);
             consumed = true;
             break;
         case DesktopMainEventOpenFavoriteOkLong:
